@@ -1,12 +1,17 @@
 # Commonworld
 
-Open `civsim.py` from this folder in Thonny and press Run. Enter the number of
-years to simulate. At each yearly prompt, press Enter to advance one year or
-type a command. Inspection commands do not advance time, consume random numbers,
-or change the simulation. Editing commands change the world immediately without
-advancing time. `quit` stops early and prints the summary.
+A civilization simulator that runs in your browser. Double-click
+`Start Civilization.cmd` (Windows), or run `node browser/serve.mjs` and open
+http://127.0.0.1:8765. Advance the world one year at a time, or type a command
+in the console at the bottom of the page. Inspection commands do not advance time,
+consume random numbers, or change the simulation. Editing commands change the
+world immediately without advancing time.
 
-The default remains 2,000 people across four countries. No packages need installing.
+The default is 2,000 people across four countries. The simulator is plain
+JavaScript (ES modules, no build step, no packages to install); the only
+requirement is Node.js, or the portable copy bundled in `browser/tools/`.
+See [browser/README.md](browser/README.md) for the dashboard and for how the
+code is laid out.
 
 ## Commands
 
@@ -176,39 +181,33 @@ shortcut; you never need IDs for ordinary name-based commands.
 
 ## Files, backups and verification
 
-`civsim.py` remains the entry point. Supporting modules are `society.py`,
-`epidemiology.py`, `warfare.py`, `civic.py`, `discoveries.py`, `inspection.py`,
-and `edit_commands.py`.
-Pre-expansion copies of all six sources are in
-`backups/expansion_20261021_153653/`. Earlier backups were retained.
-The version before this command expansion is retained in
-`backups/commands_20261021_190641/`.
-The version before the name-first controls and advanced ID lookup is retained in
-`backups/name_commands_20261022_154658/`.
+The simulator is the ES modules in `browser/dist/sim/`: `civsim.js` (people,
+countries, the yearly step), `society.js`, `epidemiology.js`, `warfare.js`,
+`civic.js`, `discoveries.js`, `technology.js`, `economy.js`, `governments.js`,
+`geography.js`, `development.js`, `systems.js`, `disasters.js`, `inspection.js`
+and `edit_commands.js`. `runtime.js` holds the few helpers that reproduce exact
+number formatting, sorting and random-number behaviour.
 
-Run the regression suite from this folder in PowerShell:
+The simulator began as a Python program. The last Python version is kept in
+this repository's history under the tag `python-final`.
+
+## Tests
+
+From the `browser` folder (Node.js, or `tools\node.exe`):
 
 ```powershell
-python -m unittest discover -v
+npm test
 ```
 
-Verified on October 23, 2026: **all 73 tests passed** using that executable,
-including inspection, editing, undo and continuation regressions. Checks
-include all inspection commands preserving complete state and RNG state; the
-actual interactive entry point; wealth, inheritance and economic distribution;
-bounded famine/drought episodes; prerequisite validity and sharing; epidemic
-growth, peak, deaths, decline and endemic recurrence; recruitment limits; forced
-conquest and settlement transfers; and population/death accounting over three
-30-year runs starting with 2,000 people. Additional checks cover all new inspection
-views, ambiguous inputs, full rollback and undo, manual additions/deaths,
-inheritance, country and settlement edits followed by natural years, eradication
-of an established disease, and an actual interactive command/edit session.
-Tests are kept alongside the simulator.
-Name-command checks also cover Roman-numeral selection, ambiguous-name hints,
-name-based options, read-only ID search, and backward-compatible numeric controls.
+That runs the 144 unit tests in `tests/unit/` (inspection, editing, undo,
+economy, epidemics, war, technology, world generation and more), then four
+regression checks against frozen reference data recorded from the Python
+original: `parity.mjs` (94 scenarios, full state and random numbers), `parity_long.mjs`
+(120 simulated years), `invariants.mjs`, and `diff_commands.mjs` (420 console
+command outputs). The reference files in `browser/tests/*.json` are data; they
+cannot be regenerated without the Python version.
 
 ## Running it from a fresh clone
 
 - Install [Node.js](https://nodejs.org) and run `node browser/serve.mjs`, then open http://127.0.0.1:8765 (on Windows, `Start Civilization.cmd` does both).
-- The Python tests need only Python 3: `python -m unittest discover -p "test_*.py"`.
-- After changing the Python rules, copy the modules to `browser/reference/`, run `python browser/tools/compile_engine.py`, then regenerate the parity fixtures with `browser/tools/reference_fixtures.py` and `browser/tools/reference_long.py` (they write `browser/tests/*.json`, which is not committed) before running `npm test` in `browser/`.
+- `cd browser && npm test` runs the whole test suite.

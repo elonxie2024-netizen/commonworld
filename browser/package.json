@@ -1,1 +1,1 @@
-{"private":true,"type":"module","scripts":{"test":"node tests/parity.mjs && node tests/parity_long.mjs && node tests/invariants.mjs"}}
+{"private":true,"type":"module","scripts":{"test":"node --test tests/unit/*.test.mjs && node tests/parity.mjs && node tests/parity_long.mjs && node tests/invariants.mjs && node tests/diff_commands.mjs"}}

@@ -1,12 +1,10 @@
-// Long-run parity: the browser engine must follow the Python simulator for 120 years (not just the first 30).
+// Long-run parity: the engine must follow the Python simulator for 120 years (not just the first 30).
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {Engine} from '../dist/engine-api.js';
-import {$get, PD, PS} from '../dist/python-runtime.js';
-import {PythonRandom} from '../dist/python-random.js';
 const ref = JSON.parse(fs.readFileSync(new URL('./reference_long.json', import.meta.url), 'utf8'));
 const e = new Engine(); e.create({seed: ref.seed});
-const rngDigest = () => { const st = $get(e.sim, 'rng').getstate(); const ints = st[1]; return ints.reduce((a, b) => a + b, 0) % 1000003; };
+const rngDigest = () => e.sim.rng.getstate()[1].reduce((a, b) => a + b, 0) % 1000003;
 let checked = 0;
 for (const row of ref.rows) {
   const s = e.step();

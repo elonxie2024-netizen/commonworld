@@ -2,7 +2,7 @@
 
 Double-click **Start Civilization.cmd** in the parent Civilization sim folder. It opens the dashboard at http://127.0.0.1:8765 using the included portable Node server. No Python process runs the browser simulation. Keep the `browser` folder beside the launcher. The launcher reuses an existing local server.
 
-The original Python files and coursework are preserved. A pre-port backup is in `../backups/before_browser_20261024_104028`.
+The simulator started as a Python program and has been rewritten as plain JavaScript. The last Python version is in the repository history under the tag `python-final`.
 
 ## Using the dashboard
 
@@ -39,25 +39,15 @@ All existing add/set/delete/move, disease, research, war/peace, disaster, and li
 
 ## Implementation and verification
 
-`dist/` is a self-contained static HTML/CSS/JavaScript application. `engine.js` contains the generated JavaScript for all eight original simulation modules. The compilation tool converts Python syntax to JavaScript functions, loops, expressions, and classes; it does not send Python source to an interpreter in the browser. `python-runtime.js` supplies collection, calling, copying, formatting, and other language semantics, and `python-random.js` implements the CPython MT19937 random sequence. A Web Worker runs the engine so the dashboard stays responsive.
+`dist/` is a self-contained static HTML/CSS/JavaScript application with no build step. The simulator is the ES modules in `dist/sim/` (`civsim.js` is the core; `runtime.js` holds the few helpers that reproduce exact rounding, number formatting, sorting and random-number behaviour). `dist/python-random.js` implements the CPython MT19937 random sequence, so a given seed still produces the same world it always did. `dist/sim/engine-api.js` turns the simulation into the snapshots the UI draws, and a Web Worker runs it so the dashboard stays responsive. Saved worlds use the format `civilization-js` version 2; older saves from the Python-compiled engine do not load.
 
-The compiler intentionally supports the syntax used by this simulator, not arbitrary Python projects. Unsupported syntax fails the build. `reference/` preserves the source modules used for the port. When maintained beside the original simulator, the compiler reads the original modules; it falls back to these copies for a standalone browser checkout.
+Checks:
 
-Verified with Thonny's Python and the included Node:
+- 144 unit tests in `tests/unit/` (one file per area, ported from the original Python suite).
+- Four regression checks against frozen reference data recorded from the Python original: 94 parity scenarios covering full state, RNG, 20 annual reports, save/load, read-only inspection and exact undo (`parity.mjs`); 120 years of long-run state (`parity_long.mjs`); 34 rule invariants (`invariants.mjs`); and 420 console command outputs on two seeds (`diff_commands.mjs`).
+- Chrome checks at desktop and mobile sizes (`browser_qa.py`): navigation, dialogs, name commands, inspection, edit/undo, year advancement, no horizontal mobile overflow or JavaScript errors.
 
-- 79 parity scenarios: full initial state; 54 command outputs/actions; 20 annual reports, populations and RNG states; full final state; save/load future continuity; read-only inspection; exact undo. Floating point state comparisons allow a relative tolerance of 1e-9. Error-message comparisons ignore insignificant integer-versus-float `.0` display suffixes.
-- 34 additional checks covering disease courses and epidemic growth/decline, famine duration/cooldown, conquest ownership, rejected-edit atomicity, and duplicate Roman-numeral names.
-- Original 73 Python regression tests remain passing.
-- Chrome checks at desktop and mobile sizes: navigation, dialogs, name commands, inspection, edit/undo, year advancement, no horizontal mobile overflow or JavaScript errors.
-
-From the parent simulator folder, regenerate and test with:
-
-```powershell
-python browser\tools\compile_engine.py
-python browser\tools\reference_fixtures.py
-& browser\tools\node.exe browser\tests\parity.mjs
-& browser\tools\node.exe browser\tests\invariants.mjs
-```
+Run everything from this folder with `npm test`, or run one file by hand with `tools\node.exe tests\parity.mjs`.
 
 The disease catalog retains acute, chronic, and endemic rules; discoveries retain 34 foundations and 1,000 composed technique/application innovations, plus 1,500 event variants. This is the existing simulation, with its rules and limitations, presented visually. Very large populations and long histories require more processing and memory; save files grow with the archive.
 
@@ -69,7 +59,6 @@ The disease catalog retains acute, chronic, and endemic rules; discoveries retai
 - **Health:** per disease and per country, how many are infected now, have recovered, and have died, with cases per year.
 - **Cures:** scientists and healers raise each disease's cure percentage every year (healers count fully where the disease is active; medical technology helps; chronic diseases are slower). A partial cure lowers spread and deaths. A disease is **eradicated automatically** at the end of the year once its cure reaches 100% and nobody is infected, and the news says so. `eradicate DISEASE` (or `delete disease`) does it early, but still only at 100% cure with nobody infected. `set disease NAME cure 0-100` is the tinkering override.
 - **Breaking news (top right of the Overview):** the lead story and recent headlines, written from the event log and ranked by importance. Click one for the original text.
-- Changing the simulation means the browser reference fixtures were regenerated; run the compile, fixture, parity, and invariant commands above after any Python change. The Python suite now has 74 tests.
 
 ## A living map: geography, settlers, construction, disasters, and cross-system effects
 
@@ -78,7 +67,6 @@ The disease catalog retains acute, chronic, and endemic rules; discoveries retai
 - **Buildings.** Workers build granaries, markets, schools, libraries, universities, clinics, hospitals, aqueducts, walls, harbors, levees, firebreaks, reinforced halls, monuments, theaters, mines, mills and roads, paid from the national treasury. Under construction they show a progress ring. Console: `projects`, `build TOWN KIND`, `build TOWN road to=OTHER`. Roads are drawn on the map and make travel faster.
 - **Disasters from geography.** Floods follow rivers and low coasts, storms hit open coasts, fires burn forests and deserts, earthquakes and landslides follow steep highlands, blizzards hit cold peaks. A disaster has an epicenter and radius, can strike several towns across borders, and is pulsed on the map. Levees, firebreaks and reinforced halls protect; buildings can be destroyed; ruined towns send refugees. Console: `hazards TOWN`, `disaster COUNTRY TYPE [severity=] [at=TOWN]`.
 - **Systems influence each other.** Every year each country's politics, science, culture, economy, health, military and expansion are analysed together, and every effect is explained on the **Systems** page. For example: schools and trade raise research; epidemics cut stability and research; monuments and the arts raise stability; war slows building and the arts and spreads camp fever; trade and crowding spread disease; floods spread waterborne disease; neighbors with ore, low stability and shared borders raise the chance of war; stable monarchies expand fastest. Console: `systems [COUNTRY]`.
-- **Verification.** `geography.py`, `development.py`, `systems.py` and `disasters.py` are compiled with the rest of the engine. The Python suite has 88 tests; the JavaScript engine matches Python exactly over 30 simulated years (89 parity checks).
 
 ## Continents, islands, boats, armies, merchants, wonders, and epidemics on the map
 
@@ -108,7 +96,5 @@ The disease catalog retains acute, chronic, and endemic rules; discoveries retai
 
 ## Testing
 
-- `python tools/reference_fixtures.py` and `python tools/reference_long.py` rebuild the Python reference data (30-year state and 54 commands; 120 years of yearly aggregates). Rebuild both after any change to the simulation, then `python tools/compile_engine.py`.
-- `npm test` (or run the files by hand with `tools\node.exe`) checks that the browser engine matches Python exactly: full state and RNG for 30 years (`parity.mjs`), 120 years of population, treasuries, techs, wars, settlements, depleted deposits and RNG (`parity_long.mjs`), and rule invariants (`invariants.mjs`).
-- `python tests/browser_qa.py` drives Chrome through every page, runs 40 years, toggles every map layer, checks that resources stay off until asked for, hovers and clicks buildings, and checks the political map, the Economy and Tech pages, and mobile layout.
-- Python unit tests: `python -m unittest discover -p "test_*.py"` in the project folder (about three minutes).
+- `npm test` runs the unit tests and the four regression checks (see Implementation and verification above).
+- `python tests/browser_qa.py` drives Chrome through every page, runs 40 years, toggles every map layer, checks that resources stay off until asked for, hovers and clicks buildings, and checks the political map, the Economy and Tech pages, and mobile layout. It is the one Python script left: it needs Python with Playwright (a copy is bundled in `tools/python`) and the server running.
