@@ -1,4 +1,4 @@
-# Civilization simulator
+# Commonworld
 
 Open `civsim.py` from this folder in Thonny and press Run. Enter the number of
 years to simulate. At each yearly prompt, press Enter to advance one year or
