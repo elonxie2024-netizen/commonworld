@@ -1,0 +1,1 @@
+{"private":true,"type":"module","scripts":{"test":"node tests/parity.mjs && node tests/parity_long.mjs && node tests/invariants.mjs"}}

@@ -1,0 +1,13 @@
+# bundled tools and generated or local files
+browser/tools/node.exe
+browser/tools/python/
+browser/tests/reference.json
+browser/tests/reference_long.json
+browser/outputs/
+backups/
+*.bak
+*.disease-backup
+__pycache__/
+*.pyc
+.openai/
+.git-nested-backup/

@@ -1,0 +1,8 @@
+tools/node.exe
+tools/python/
+tests/reference.json
+tests/*.png
+tests/browser-results.json
+**/__pycache__/
+*.zip
+outputs/
