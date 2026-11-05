@@ -1,6 +1,8 @@
 # Commonworld
 
-A civilization simulator that runs in your browser. **Play it online: https://elonxie2024-netizen.github.io/commonworld/**. Or double-click
+A civilization simulator that runs in your browser. **Play it online: 
+https://elonxie2024-netizen.github.io/commonworld/**. 
+Or double-click
 `Start Civilization.cmd` (Windows), or run `node browser/serve.mjs` and open
 http://127.0.0.1:8765. Advance the world one year at a time, or type a command
 in the console at the bottom of the page. Inspection commands do not advance time,
