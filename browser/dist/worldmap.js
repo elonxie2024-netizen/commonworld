@@ -419,27 +419,8 @@ export class WorldMap {
         });
       }
     }
-    if (o.names && o.borders) {
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const names = new Map(this.snap.countries.map(c => [c.id, c.name]));
-      for (const c of this.centroids) {
-        const size = Math.min(30, Math.max(Math.min(18, 10 / css), Math.sqrt(c.cells) * 1.5)), text = (names.get(c.id) || '').toUpperCase();
-        ctx.font = `800 ${size}px 'Segoe UI',sans-serif`; ctx.lineWidth = 3.4; ctx.strokeStyle = 'rgba(8,12,34,.5)'; ctx.fillStyle = 'rgba(255,255,255,.72)';
-        ctx.strokeText(text, c.x, c.y); ctx.fillText(text, c.x, c.y);
-      }
-    }
     this.drawSettlements(ctx, css);
     if (o.buildings) this.drawBuildings(ctx, css);
-    if (o.names) {
-      const fs = Math.min(24, 10.5 / css);
-      ctx.font = `600 ${fs}px 'Segoe UI',sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      for (const s of this.geoSites) {
-        if (s.tier === 'village' && css < 1.5) continue; // tiny villages are named only when you look closer
-        const label = s.name, tw = ctx.measureText(label).width + fs * 1.1, y = s.py + s.r + fs * 1.15;
-        ctx.fillStyle = 'rgba(8,12,34,.8)'; ctx.beginPath(); ctx.roundRect(s.px - tw / 2, y - fs * 0.85, tw, fs * 1.7, fs * 0.85); ctx.fill();
-        ctx.fillStyle = '#fff'; ctx.fillText(label, s.px, y);
-      }
-    }
   }
 
 
@@ -617,26 +598,34 @@ export class WorldMap {
       if (x + 1 < g.w && !hasWater(g.terrain[y][x + 1])) seg((x + 1) * cw, y * ch, (x + 1) * cw, (y + 1) * ch, a, this.owner[y][x + 1]);
       if (y + 1 < g.h && !hasWater(g.terrain[y + 1][x])) seg(x * cw, (y + 1) * ch, (x + 1) * cw, (y + 1) * ch, a, this.owner[y + 1][x]);
     }
-    if (o.names) {
+    this.drawSettlements(ctx, css);
+    if (o.buildings) this.drawBuildings(ctx, css);
+  }
+
+  // Country and settlement names. They are drawn last, on the overlay, so no sprite, army or caravan ever covers them.
+  drawNames(ctx) {
+    const o = this.geoOpts, css = this.css, political = this.view === 'political';
+    if (!o.names || !this.snap?.geo || !(political || this.view === 'geo')) return;
+    if (political || o.borders) {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const names = new Map(this.snap.countries.map(c => [c.id, c.name]));
       for (const c of this.centroids) {
-        const size = Math.min(34, Math.max(Math.min(20, 11 / css), Math.sqrt(c.cells) * 1.7)), text = (names.get(c.id) || '').toUpperCase();
-        ctx.font = `800 ${size}px 'Segoe UI',sans-serif`; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.fillStyle = 'rgba(30,34,60,.7)';
+        const size = political ? Math.min(34, Math.max(Math.min(20, 11 / css), Math.sqrt(c.cells) * 1.7)) : Math.min(30, Math.max(Math.min(18, 10 / css), Math.sqrt(c.cells) * 1.5)), text = (names.get(c.id) || '').toUpperCase();
+        ctx.font = `800 ${size}px 'Segoe UI',sans-serif`; ctx.lineWidth = political ? 4 : 3.4;
+        ctx.strokeStyle = political ? 'rgba(255,255,255,.75)' : 'rgba(8,12,34,.5)'; ctx.fillStyle = political ? 'rgba(30,34,60,.7)' : 'rgba(255,255,255,.72)';
         ctx.strokeText(text, c.x, c.y); ctx.fillText(text, c.x, c.y);
       }
     }
-    this.drawSettlements(ctx, css);
-    if (o.buildings) this.drawBuildings(ctx, css);
-    if (o.names) {
-      const fs = Math.min(24, 10.5 / css);
-      ctx.font = `700 ${fs}px 'Segoe UI',sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      for (const s of this.geoSites) {
-        if (s.tier === 'village' && css < 1.5) continue; // tiny villages are named only when you look closer
-        const label = s.name, tw = ctx.measureText(label).width + fs * 1.1, y = s.py + s.r + fs * 1.15 + (css >= 2 && s.count ? 12 : 0);
-        ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.strokeStyle = 'rgba(30,34,60,.45)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(s.px - tw / 2, y - fs * 0.85, tw, fs * 1.7, fs * 0.85); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#1e223c'; ctx.fillText(label, s.px, y);
-      }
+    const fs = Math.min(24, 10.5 / css);
+    ctx.font = `${political ? 700 : 600} ${fs}px 'Segoe UI',sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const s of this.geoSites) {
+      if (s.tier === 'village' && css < 1.5) continue; // tiny villages are named only when you look closer
+      const label = s.name, tw = ctx.measureText(label).width + fs * 1.1;
+      const y = s.py + s.r + fs * 1.15 + (political && css >= 2 && s.count ? 12 : 0);
+      if (political) { ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.strokeStyle = 'rgba(30,34,60,.45)'; ctx.lineWidth = 1; }
+      else ctx.fillStyle = 'rgba(8,12,34,.8)';
+      ctx.beginPath(); ctx.roundRect(s.px - tw / 2, y - fs * 0.85, tw, fs * 1.7, fs * 0.85); ctx.fill(); if (political) ctx.stroke();
+      ctx.fillStyle = political ? '#1e223c' : '#fff'; ctx.fillText(label, s.px, y);
     }
   }
 
@@ -758,6 +747,7 @@ export class WorldMap {
         if (css >= 0.9) pill(`${e.people} ${e.kind === 'emigrant' ? 'newcomers' : 'settlers'}${sea ? ' · by sea' : ''}`, pos.x, pos.y + 12, 'rgba(8,12,34,.88)', '#fff', 9.5 / css);
       }
     }
+    this.drawNames(ctx);
     const h = this.hover; if (!h) return;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
     if (h.type === 'cell') { ctx.shadowBlur = 0; ctx.strokeRect(h.cx * this.cw + 1, h.cy * this.ch + 1, this.cw - 2, this.ch - 2); }
