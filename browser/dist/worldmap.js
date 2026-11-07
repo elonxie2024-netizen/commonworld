@@ -54,7 +54,7 @@ export class WorldMap {
     this.pos = new Map(); this.anchors = new Map();
     this.sites = []; this.dots = [];
     this.legendCluster = [];
-    this.view = 'clusters';
+    this.view = 'geo';
     this.geoOpts = { terrain: true, rivers: true, borders: true, roads: true, resources: false, buildings: true, names: true, contested: true, settlers: true, armies: true, merchants: true, projects: true, outbreaks: true, disasters: true, labels: true };
     this.contested = new Set();
     this.deposits = new Map(); this.features = new Map();

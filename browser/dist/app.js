@@ -147,7 +147,7 @@ function pairChart(reports) {
   return `<div class="chart"><div class="pairs">${rows.map(r => `<div class="pair" title="Year ${r.year}: ${r.births} births, ${r.deaths} deaths"><i style="height:${r.births / max * 100}%;background:#10b981"></i><i style="height:${r.deaths / max * 100}%;background:#f43f5e"></i></div>`).join('')}</div><div class="chart-x"><span>Year ${rows[0].year}</span><span class="lg-inline"><i style="background:#10b981"></i>Births <i style="background:#f43f5e"></i>Deaths</span><span>Year ${rows.at(-1).year}</span></div></div>`;
 }
 
-let newsItems = [], mapView = 'clusters';
+let newsItems = [], mapView = 'geo';
 const geoOn = { terrain: true, rivers: true, borders: true, roads: true, resources: false, buildings: true, names: true, contested: true, settlers: true, armies: true, merchants: true, projects: true, outbreaks: true, disasters: true, labels: true };
 const diseaseCounts = name => snap.healthStats?.diseases[name]?.counts || [0, 0, 0, 0];
 function outcomeBar(sick, rec, died, cases) {
