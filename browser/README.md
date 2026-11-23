@@ -8,10 +8,12 @@ The simulator started as a Python program and has been rewritten as plain JavaSc
 
 - **Time:** Next year (or Enter), +5 / +10 years, Play/Stop with speed. Undo reverts the latest edit.
 - **World map (Overview):** every living person is a dot, every cluster a settlement. Color people by country, age, wealth, health, or occupation. Hover to identify, click a dot or settlement name to open it. Positions are illustrative only.
-- **Pages:** Overview, Countries, Settlements, People, Demographics, Discoveries, Health, Wars, Event log, Workshop. People and Settlements search by name or `#ID`.
-- **Click anything** (person, settlement, country, disease) for a detail window with inline editing: sliders, dropdowns, move/infect/cure, triggers, disasters, war and peace.
-- **Workshop:** a form for every editing command, with name autocomplete and a live preview of the exact command it will run.
-- **Console (bottom bar):** the original command grammar. Names first, quote multiword names; Tab completes names; Up/Down recalls history; `/` focuses it. `ids` gives optional numeric IDs. Inspection never advances time.
+- **Pages:** Overview, Countries, Settlements, People, Demographics, Discoveries, Health, Wars, Event log. People and Settlements search by name.
+- **Click anything** on the map or in a list to inspect it: towns and buildings, tiles, people, countries, diseases, and the things on the move (settler parties, armies, merchant bands).
+- **Influences (bottom bar):** small nudges, aimed by clicking the map. *Spark an expedition* (click a town, then open land or let them choose), *Seed an idea* (click a country: a third of a discovery it is ready for, scaled by its research power; console: `inspire COUNTRY [DISCOVERY]`), *Shift diplomacy* (friendship as a science pact, eased tensions as peace and a truce, or a rivalry turned to war; click two countries), and *Stir the land* (click land: the likeliest disaster for that ground, or one you pick, at the severity you pick). Esc cancels. Undo reverts the latest one.
+- **Pings:** big events (wars, sieges, breakaways, outbreaks, cures, disasters) leave a pulsing marker on the map and a chip in the map's corner for a few years. Click a chip to jump there; click the marker to open what it is about.
+- **Console (press `~`):** the original command grammar, hidden by default. Names first, quote multiword names; Tab completes names; Up/Down recalls history; Esc closes it. `ids` gives optional numeric IDs. Inspection never advances time.
+- **Code layout:** the dashboard is `app.js`, with self-contained pieces in `dist/ui/`: `influences.js` (the bar), `pings.js` (map pings and their tray), `units.js` (panels for moving units) and `console.js` (the hidden console). The map takes extra layers through `WorldMap.addLayer`.
 - **Save / Open** download and restore a full world including random state.
 
 Examples (a new random seed is chosen each time the page starts; type a seed in the Seed box under New simulation (or in the New simulation dialog) to repeat a world, and that box always shows the current one; these examples assume seed 42):

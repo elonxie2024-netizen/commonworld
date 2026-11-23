@@ -2,7 +2,10 @@ import { BrowserSimulation } from './bridge.js';
 import { $, $$, esc, num, quote, initials, icon, PALETTE, JOBS, JOB_COLORS, CATEGORY_COLORS, CONDITION_COLORS } from './util.js';
 import { WorldMap, MODES, TERRAIN, RESOURCES, FEATURES, BUILD_STYLE, HAZARD_STYLE, WONDERS } from './worldmap.js';
 import { headlines } from './news.js';
-import { TOOLS, GROUPS, GROUP_COLORS, EVENTS, DISASTERS, SEVERITIES, GOVERNMENTS, ECONOMIES, toolById, toolCard, previewFor, collect } from './tools.js';
+import { Console } from './ui/console.js';
+import { InfluenceBar } from './ui/influences.js';
+import { Pings } from './ui/pings.js';
+import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -18,17 +21,14 @@ const SECTIONS = [
   ['tech', 'Tech tree', 'tree', 'Fifteen ages of discovery: what each country knows, is researching, and what it unlocks.'],
   ['health', 'Health', 'pulse', 'Diseases, active infections, and outbreaks.'],
   ['wars', 'Wars', 'swords', 'Active conflicts and peace negotiations.'],
-  ['events', 'Event log', 'list', 'Everything that has happened, newest first.'],
-  ['workshop', 'Workshop', 'sliders', 'Edit people, places, countries, diseases, and simulation rates.']
+  ['events', 'Event log', 'list', 'Everything that has happened, newest first.']
 ];
 const EV_ICONS = { war: 'swords', sickness: 'pulse', disease: 'pulse', discovery: 'bulb', discoveries: 'bulb', political: 'flag', creative: 'star', disaster: 'bolt', population: 'users', lineage: 'dna' };
 const PAGE = 48;
 
 let sim, snap, idx, section = 'overview', busy = false, playing = false, running = false, stopFlag = false, dialog = null;
 let mapMode = 'country', showPeople = true;
-const view = { search: '', country: '', job: '', status: 'living', infected: false, sort: 'fame', page: 0, eventCat: '', toolGroup: 'All', techOnly: '' };
-const toolValues = {};
-const history = []; let historyIndex = 0;
+const view = { search: '', country: '', job: '', status: 'living', infected: false, sort: 'fame', page: 0, eventCat: '', techOnly: '' };
 
 const TECH_COLORS = { agriculture: '#65a30d', industry: '#d97706', energy: '#eab308', construction: '#92400e', warfare: '#dc2626', seafaring: '#0284c7', trade: '#ca8a04', knowledge: '#6366f1', medicine: '#10b981', culture: '#db2777', governance: '#a855f7' };
 let techCache = null, techScroll = null;
@@ -104,7 +104,7 @@ function setSnap(s) {
     if (p.alive !== false) { idx.living.push(p); push(idx.residents, p.settlement, p); }
     for (const parent of p.parents || []) push(idx.kids, parent, p);
   }
-  map?.setData(s);
+  if (map) { map.setData(s); pings.update(s, map); renderTray(); }
 }
 const cc = id => PALETTE[(idx?.cIndex.get(String(id)) ?? 0) % PALETTE.length];
 const activeCountries = () => snap.countries.filter(c => c.population > 0 || c.ended == null);
@@ -264,8 +264,7 @@ const VIEWS = {
     return `<div class="kpis">${kpi('Settler parties', num(parties().length), 'Walking to new towns', 'compass', '#14b8a6')}${kpi('Building now', num(snap.projects.length), 'Projects in progress', 'hammer', '#f59e0b')}${kpi('Buildings standing', num(total), `in ${built.length} settlements`, 'home', '#6366f1')}${kpi('Road cells', num(snap.roads.length), 'Faster travel and trade', 'map', '#a16207')}</div>
     <div class="grid-2">${liveExpeditions(12)}${liveProjects(12)}</div>
     <div class="grid-2">${liveArmies(12)}${liveCaravans(12)}</div>
-    ${panel('Buildings by settlement', 'Hover a badge for what it does', built.length ? `<div class="bgrid">${built.sort((a, b) => Object.keys(b.buildings).length - Object.keys(a.buildings).length).map(s => `<button class="bcard" data-settlement="${s.id}" style="--c:${cc(s.country)}"><b>${esc(s.name)}</b><small>${esc(s.countryName)}</small><div>${Object.entries(s.buildings).map(([k, y]) => bchip(k, y)).join('')}</div></button>`).join('')}</div>` : empty('No buildings yet. Settlements build as soon as their country has funds and a need.'))}
-    <h2 class="section-title"><i class="dot" style="--c:#0ea5e9"></i>Direct the work</h2><div class="cards tools">${['build', 'road', 'settle'].map(id => toolCard(toolById(id), snap, toolValues[id] || {})).join('')}</div>`;
+    ${panel('Buildings by settlement', 'Hover a badge for what it does', built.length ? `<div class="bgrid">${built.sort((a, b) => Object.keys(b.buildings).length - Object.keys(a.buildings).length).map(s => `<button class="bcard" data-settlement="${s.id}" style="--c:${cc(s.country)}"><b>${esc(s.name)}</b><small>${esc(s.countryName)}</small><div>${Object.entries(s.buildings).map(([k, y]) => bchip(k, y)).join('')}</div></button>`).join('')}</div>` : empty('No buildings yet. Settlements build as soon as their country has funds and a need.'))}`;
   },
 
   economy() {
@@ -312,8 +311,8 @@ const VIEWS = {
     return `<div class="cards big">${list.map(countryCard).join('')}</div>${panel('Forms of government', 'Each form changes war, trade, science, culture, taxes, and how rulers are chosen. Countries drift between them as they change.', `<div class="govgrid">${forms.join('')}</div>`)}`;
   },
 
-  settlements() { return `<div class="toolbar">${searchBox('Search settlements by name or #ID…')}${select('f-country', 'country', countryOptions(), view.country)}${select('f-sort', 'sort', [['pop', 'Largest first'], ['name', 'Name A–Z']], view.sort === 'name' ? 'name' : 'pop')}<span class="count" id="count"></span></div><div id="results"></div>`; },
-  people() { return `<div class="toolbar">${searchBox('Search by name, job, place, or #ID…')}${select('f-country', 'country', countryOptions(), view.country)}${select('f-job', 'job', [['', 'Any occupation'], ...JOBS.map(j => [j, cap(j)])], view.job)}${select('f-status', 'status', [['living', 'Living'], ['dead', 'Deceased'], ['all', 'Everyone']], view.status)}${select('f-sort', 'sort', [['fame', 'Most famous'], ['wealth', 'Wealthiest'], ['age', 'Oldest'], ['name', 'Name A–Z']], ['fame', 'wealth', 'age', 'name'].includes(view.sort) ? view.sort : 'fame')}<label class="check"><input type="checkbox" data-filter="infected" ${view.infected ? 'checked' : ''}> Infected only</label><span class="count" id="count"></span></div><div id="results"></div>`; },
+  settlements() { return `<div class="toolbar">${searchBox('Search settlements by name…')}${select('f-country', 'country', countryOptions(), view.country)}${select('f-sort', 'sort', [['pop', 'Largest first'], ['name', 'Name A–Z']], view.sort === 'name' ? 'name' : 'pop')}<span class="count" id="count"></span></div><div id="results"></div>`; },
+  people() { return `<div class="toolbar">${searchBox('Search by name, job, or place…')}${select('f-country', 'country', countryOptions(), view.country)}${select('f-job', 'job', [['', 'Any occupation'], ...JOBS.map(j => [j, cap(j)])], view.job)}${select('f-status', 'status', [['living', 'Living'], ['dead', 'Deceased'], ['all', 'Everyone']], view.status)}${select('f-sort', 'sort', [['fame', 'Most famous'], ['wealth', 'Wealthiest'], ['age', 'Oldest'], ['name', 'Name A–Z']], ['fame', 'wealth', 'age', 'name'].includes(view.sort) ? view.sort : 'fame')}<label class="check"><input type="checkbox" data-filter="infected" ${view.infected ? 'checked' : ''}> Infected only</label><span class="count" id="count"></span></div><div id="results"></div>`; },
 
   demographics() {
     const list = idx.living.filter(p => !view.country || String(p.country) === view.country), n = list.length || 1;
@@ -365,7 +364,7 @@ Also needs one of: ${g.join(' or ')}`).join('')}\nCost ${cost} research\n${effec
     return `<div class="toolbar">${searchBox('Search discoveries…')}${select('f-country', 'country', countryOptions(), view.country)}<span class="grow"></span><button class="soft" data-report="catalog">${icon('list')} Browse full catalog</button></div>
     <div class="cards two">${snap.countries.filter(c => (c.population > 0 || c.technologies.length) && (!view.country || String(c.id) === view.country)).map(c => {
       const have = c.technologies.length + c.innovations.length, chip = (t, kind) => `<span class="tag ${kind}" style="--c:${kind === 'found' ? '#3b82f6' : '#f59e0b'}">${esc(t)}<button title="Revoke" aria-label="Revoke ${esc(t)}" data-run="${esc(`revoke ${quote(c.name)} ${quote(t)}`)}" data-confirm="Revoke ${esc(t)} from ${esc(c.name)}? Discoveries that depend on it are removed too.">×</button></span>`;
-      return `<section class="panel" style="--c:${cc(c.id)}"><div class="panel-head"><div><h2><i class="dot"></i>${esc(c.name)}</h2><p>${c.technologies.length} foundations · ${c.innovations.length} innovations</p></div><button class="link" data-report="${esc('discoveries ' + quote(c.name))}">Report →</button></div><div class="pad"><div class="meter big"><i style="width:${Math.max(1, have / total * 100)}%"></i></div><small class="muted">${have} of ${total} known</small><div class="taglist">${c.technologies.filter(t => t.toLowerCase().includes(q)).map(t => chip(t, 'found')).join('')}${c.innovations.filter(t => t.toLowerCase().includes(q)).map(t => chip(t, 'innov')).join('') || ''}${have ? '' : '<span class="muted">Nothing discovered yet.</span>'}</div><form class="inline grant" data-tpl="${esc(`grant ${quote(c.name)} {q:discovery}`)}"><span class="pick-wrap"><input name="discovery" data-pick="discovery" placeholder="Grant a discovery…" required autocomplete="off"><span class="pick-list" hidden></span></span><button class="soft">${icon('plus')} Grant</button></form></div></section>`;
+      return `<section class="panel" style="--c:${cc(c.id)}"><div class="panel-head"><div><h2><i class="dot"></i>${esc(c.name)}</h2><p>${c.technologies.length} foundations · ${c.innovations.length} innovations</p></div><button class="link" data-report="${esc('discoveries ' + quote(c.name))}">Report →</button></div><div class="pad"><div class="meter big"><i style="width:${Math.max(1, have / total * 100)}%"></i></div><small class="muted">${have} of ${total} known</small><div class="taglist">${c.technologies.filter(t => t.toLowerCase().includes(q)).map(t => chip(t, 'found')).join('')}${c.innovations.filter(t => t.toLowerCase().includes(q)).map(t => chip(t, 'innov')).join('') || ''}${have ? '' : '<span class="muted">Nothing discovered yet.</span>'}</div>${c.population > 0 ? `<button class="soft" data-influence-go="idea:${c.id}">${icon('bulb')} Seed an idea</button>` : ''}</div></section>`;
     }).join('')}</div>`;
   },
 
@@ -390,23 +389,16 @@ Also needs one of: ${g.join(' or ')}`).join('')}\nCost ${cost} research\n${effec
     const warCard = w => {
       const [a, b] = w.countries.map(id => idx.countries.get(String(id))), duration = snap.year - w.started;
       const side = c => `<div class="side" style="--c:${cc(c.id)}" data-country="${c.id}" role="button" tabindex="0"><span class="flag-dot big">${esc(initials(c.name).charAt(0))}</span><b>${esc(c.name)}</b><small>${num(c.population)} residents</small><small class="army">${esc(c.units?.army || '')}</small></div>`;
-      return `<article class="war-card">${side(a)}<div class="vs"><span>VS</span><small>Since year ${w.started}</small><small>${duration} ${duration === 1 ? 'year' : 'years'}</small></div>${side(b)}<div class="war-actions"><button class="soft" data-report="${esc('wars ' + quote(a.name))}">${icon('list')} War report</button><button class="primary" data-run="${esc(`peace ${quote(a.name)} ${quote(b.name)}`)}">${icon('flag')} Make peace</button></div></article>`;
+      return `<article class="war-card">${side(a)}<div class="vs"><span>VS</span><small>Since year ${w.started}</small><small>${duration} ${duration === 1 ? 'year' : 'years'}</small></div>${side(b)}<div class="war-actions"><button class="soft" data-report="${esc('wars ' + quote(a.name))}">${icon('list')} War report</button><button class="primary" data-run="${esc(`peace ${quote(a.name)} ${quote(b.name)}`)}">${icon('flag')} Broker peace</button></div></article>`;
     };
-    return `${snap.wars.length ? `<div class="cards two">${snap.wars.map(warCard).join('')}</div>` : `<section class="panel peace">${icon('shield')}<div><h2>No active wars</h2><p>All countries are at peace. Declare a war below to test it.</p></div></section>`}
-    <h2 class="section-title">Diplomacy tools</h2><div class="cards two">${toolCard(toolById('war'), snap, toolValues.war)}${toolCard(toolById('peace'), snap, toolValues.peace)}</div>
+    return `${snap.wars.length ? `<div class="cards two">${snap.wars.map(warCard).join('')}</div>` : `<section class="panel peace">${icon('shield')}<div><h2>No active wars</h2><p>All countries are at peace. To stoke a rivalry, use Shift diplomacy in the bar at the bottom.</p></div></section>`}
+    ${diplomacyPanel()}
     <div class="toolbar"><button class="soft" data-report="government">${icon('list')} Government report</button><button class="soft" data-report="wars">${icon('list')} All wars report</button></div>`;
   },
 
   events() {
     const cats = [...new Set(snap.events.map(e => e.category))];
     return `<div class="toolbar">${searchBox('Search events…')}<div class="chips"><button class="chip ${view.eventCat ? '' : 'on'}" data-event-cat="">All</button>${cats.map(c => `<button class="chip ${view.eventCat === c ? 'on' : ''}" data-event-cat="${esc(c)}" style="--c:${CATEGORY_COLORS[c] || '#64748b'}"><i></i>${esc(cap(c))}</button>`).join('')}</div></div><section class="panel"><div class="events spaced" id="results"></div></section>`;
-  },
-
-  workshop() {
-    const groups = view.toolGroup === 'All' ? GROUPS : [view.toolGroup];
-    return `<div class="toolbar"><div class="chips"><button class="chip ${view.toolGroup === 'All' ? 'on' : ''}" data-tool-group="All">All tools</button>${GROUPS.map(g => `<button class="chip ${view.toolGroup === g ? 'on' : ''}" data-tool-group="${esc(g)}" style="--c:${GROUP_COLORS[g]}"><i></i>${esc(g)}</button>`).join('')}</div></div>
-    ${groups.map(g => `<h2 class="section-title" style="--c:${GROUP_COLORS[g]}"><i class="dot"></i>${esc(g)}</h2><div class="cards tools">${TOOLS.filter(t => t.group === g).map(t => toolCard(t, snap, toolValues[t.id] || {})).join('')}</div>`).join('')}
-    <p class="muted foot-note">Every tool builds a normal console command, shown under each form. Edits apply immediately, never advance the year, and can be undone until the next year passes.</p>`;
   }
 };
 
@@ -442,9 +434,6 @@ function countryCard(c) {
 }
 
 // ---------- dialogs ----------
-const inline = (label, tpl, value, { type = 'text', step, confirm } = {}) => `<form class="inline" data-tpl="${esc(tpl)}" ${confirm ? `data-confirm="${esc(confirm)}"` : ''}><label><span>${label}</span><input name="value" type="${type}" ${step ? `step="${step}"` : type === 'number' ? 'step="any"' : ''} value="${esc(value)}" required></label><button class="soft">Apply</button></form>`;
-const inlineSelect = (label, tpl, options, current = '', placeholder = '') => `<label class="inline sel"><span>${label}</span><select data-tpl="${esc(tpl)}">${placeholder ? `<option value="">${placeholder}</option>` : ''}${options.map(o => `<option ${o === current ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></label>`;
-const slider = (label, tpl, value, id) => `<label class="slider"><span>${label}</span><input type="range" min="0" max="100" step="1" value="${Math.round(value)}" data-tpl="${esc(tpl)}" data-live="${id}"><output id="${id}">${Math.round(value)}</output></label>`;
 const chipLink = (type, item, label) => `<button class="chip" data-${type}="${item.id}" style="--c:${cc(item.country)}"><i></i>${esc(label ?? item.name)}</button>`;
 const dlgHead = (color, avatar, eyebrow, title, tags) => `<header class="dlg-head" style="--c:${color}">${avatar}<div><span class="eyebrow">${eyebrow}</span><h2>${esc(title)}</h2><div class="tags">${tags}</div></div></header>`;
 
@@ -462,34 +451,29 @@ const DIALOGS = {
   person(p) {
     const n = quote(p.name), alive = p.alive !== false, parents = (p.parents || []).map(id => idx.people.get(String(id))).filter(Boolean), kids = idx.kids.get(String(p.id)) || [];
     const country = idx.countries.get(String(p.country)), place = idx.settlements.get(String(p.settlement));
-    const placeNames = livePlaces().map(s => s.name), countryNames = activeCountries().map(c => c.name);
-    return `${dlgHead(cc(p.country), `<span class="avatar xl" style="--c:${cc(p.country)}">${esc(initials(p.name))}</span>`, `PERSON · ID ${p.id}`, p.name, `${tag(p.role || p.job || 'resident', cc(p.country))}${alive ? tag('Living', '#10b981') : tag(`Died year ${p.died ?? '?'}${p.causeOfDeath ? ' · ' + p.causeOfDeath : ''}`, '#64748b')}${p.infection ? tag('Infected: ' + p.infection, '#ef4444') : ''}`)}
+    return `${dlgHead(cc(p.country), `<span class="avatar xl" style="--c:${cc(p.country)}">${esc(initials(p.name))}</span>`, 'PERSON', p.name, `${tag(p.role || p.job || 'resident', cc(p.country))}${alive ? tag('Living', '#10b981') : tag(`Died year ${p.died ?? '?'}${p.causeOfDeath ? ' · ' + p.causeOfDeath : ''}`, '#64748b')}${p.infection ? tag('Infected: ' + p.infection, '#ef4444') : ''}`)}
     <div class="dlg-body"><div class="statgrid">${stat('Age', p.age)}${stat('Born', 'year ' + p.born)}${stat('Occupation', esc(p.job || 'resident'))}${stat('Wealth', num(p.wealth, 1))}${stat('Fame', num(p.fame, 1))}${stat('Lineage', esc(p.lineageName))}</div>
     <div class="linkrow"><span>Country</span>${country ? chipLink('country', country) : '—'}<span>Home</span>${place ? chipLink('settlement', place) : '—'}</div>
     ${parents.length || kids.length ? `<h3 class="sub">Family</h3><div class="linkrow">${parents.length ? '<span>Parents</span>' : ''}${parents.map(x => chipLink('person', x)).join('')}${kids.length ? '<span>Children</span>' : ''}${kids.slice(0, 12).map(x => chipLink('person', x)).join('')}${kids.length > 12 ? `<small class="muted">+${kids.length - 12} more</small>` : ''}</div>` : ''}
     <div class="actions"><button class="soft" data-report="${esc('person ' + n)}">${icon('list')} Full life report</button></div>
-    ${alive ? `<h3 class="sub">Edit this person</h3><div class="editgrid">${inline('Name', `set person ${n} name {q:value}`, p.first)}${inline('Age', `set person ${n} age {value}`, p.age, { type: 'number', step: 1 })}${inline('Wealth', `set person ${n} wealth {value}`, Math.round(p.wealth || 0), { type: 'number' })}${inline('Fame (0–100)', `set person ${n} fame {value}`, Math.round(p.fame || 0), { type: 'number' })}${inlineSelect('Occupation', `set person ${n} job {value}`, JOBS, p.job)}${inlineSelect('Move to settlement', `move person ${n} {q:value}`, placeNames, '', 'Choose…')}${inlineSelect('Change country', `set person ${n} country {q:value}`, countryNames, p.countryName)}${inlineSelect('Infect with', `infect ${n} {q:value}`, snap.diseases.filter(d => !d.retired).map(d => d.name), '', 'Choose…')}</div>
-    <div class="actions">${p.infection ? `<button class="soft" data-run="${esc('cure ' + n)}">${icon('shield')} Cure infection</button>` : ''}<button class="danger-btn" data-run="${esc('delete person ' + n)}" data-confirm="Remove ${esc(p.name)}? This records a death.">${icon('trash')} Remove person</button></div>` : ''}</div>`;
+    </div>`;
   },
 
   settlement(s) {
     const n = quote(s.name), residents = (idx.residents.get(String(s.id)) || []).slice().sort((a, b) => (b.fame || 0) - (a.fame || 0)), country = idx.countries.get(String(s.country));
-    const others = livePlaces().filter(x => x.id !== s.id).map(x => x.name);
-    return `${dlgHead(cc(s.country), `<span class="avatar xl sq" style="--c:${cc(s.country)}">${icon('home')}</span>`, `${(s.kind || 'settlement').toUpperCase()} · ID ${s.id}`, s.name, `${tag(s.countryName, cc(s.country))}${s.capital ? tag('★ Capital', '#f59e0b') : ''}${s.abandoned ? tag('Abandoned', '#ef4444') : ''}`)}
+    return `${dlgHead(cc(s.country), `<span class="avatar xl sq" style="--c:${cc(s.country)}">${icon('home')}</span>`, (s.kind || 'settlement').toUpperCase(), s.name, `${tag(s.countryName, cc(s.country))}${s.capital ? tag('★ Capital', '#f59e0b') : ''}${s.abandoned ? tag('Abandoned', '#ef4444') : ''}`)}
     <div class="dlg-body"><div class="statgrid">${stat('Residents', num(s.population))}${stat('Type', esc(s.kind || '—'))}${stat('Terrain', esc(s.terrainText || '—'))}${stat('Founder', esc(s.founderName || '—'))}</div>
     <div class="linkrow"><span>Country</span>${country ? chipLink('country', country) : '—'}</div>
     <div class="actions"><button class="soft" data-report="${esc('settlement ' + n)}">${icon('list')} Full settlement report</button></div>
     ${settlementExtras(s)}
-    <h3 class="sub">Residents <small class="muted">${num(residents.length)} total · most notable first</small></h3><div class="people-grid tight">${residents.slice(0, 24).map(personCard).join('') || '<p class="muted">No residents.</p>'}</div>
-    <h3 class="sub">Edit this settlement</h3><div class="editgrid">${inline('Name', `set settlement ${n} name {q:value}`, s.name)}${inlineSelect('Transfer to country', `set settlement ${n} country {q:value}`, activeCountries().map(c => c.name), s.countryName)}${inlineSelect('Dissolve into', `delete settlement ${n} to={q:value}`, others, '', 'Choose destination…')}</div>
-    <h3 class="sub">Add a resident</h3>${toolCard(toolById('person-add'), snap, { ...(toolValues['person-add'] || {}), settlement: s.name })}</div>`;
+    <h3 class="sub">Residents <small class="muted">${num(residents.length)} total · most notable first</small></h3><div class="people-grid tight">${residents.slice(0, 24).map(personCard).join('') || '<p class="muted">No residents.</p>'}</div></div>`;
   },
 
   country(c) {
     const n = quote(c.name), col = cc(c.id), enemies = snap.wars.filter(w => w.countries.includes(c.id)).map(w => w.names.find(x => x !== c.name));
-    const others = activeCountries().filter(x => x.id !== c.id).map(x => x.name), places = snap.settlements.filter(s => s.country === c.id && !s.abandoned && s.population > 0);
+    const places = snap.settlements.filter(s => s.country === c.id && !s.abandoned && s.population > 0);
     const top = idx.living.filter(p => p.country === c.id).sort((a, b) => (b.fame || 0) - (a.fame || 0)).slice(0, 6);
-    return `${dlgHead(col, `<span class="flag-dot xl" style="--c:${col}">${esc(initials(c.name).charAt(0))}</span>`, `COUNTRY · ID ${c.id}`, c.name, `${tag(govLabel(c.government), col)}${tag(c.economicSystem, '#64748b')}${tag(c.eraName || '', '#b45309')}${c.conditions.map(x => tag(x, CONDITION_COLORS[x])).join('')}${enemies.map(x => tag('⚔ ' + x, '#dc2626')).join('')}`)}
+    return `${dlgHead(col, `<span class="flag-dot xl" style="--c:${col}">${esc(initials(c.name).charAt(0))}</span>`, 'COUNTRY', c.name, `${tag(govLabel(c.government), col)}${tag(c.economicSystem, '#64748b')}${tag(c.eraName || '', '#b45309')}${c.conditions.map(x => tag(x, CONDITION_COLORS[x])).join('')}${enemies.map(x => tag('⚔ ' + x, '#dc2626')).join('')}`)}
     <div class="dlg-body"><p class="muted gov-note"><b>${esc(govLabel(c.government))}.</b> ${esc(govBlurb(c.government))}</p><div class="statgrid">${stat('Residents', num(c.population))}${stat('Treasury', num(c.treasury))}${stat('Research', num(c.research))}${stat('Settlements', places.length)}${stat('Discoveries', c.technologies.length + c.innovations.length)}${stat('Ruler', esc(c.rulerName || 'none'))}${stat('Land fertility', c.terrain.fertility.toFixed(2))}${stat('Terrain defense', '×' + c.terrain.defense.toFixed(2))}</div>
     <div class="linkrow"><span>Land borders</span>${c.borders.map(id => idx.countries.get(String(id))).filter(Boolean).map(x => chipLink('country', x)).join('') || '<small class="muted">None. This country is isolated and cannot be invaded by land.</small>'}${c.seaNeighbors.length ? '<span>Across the sea</span>' + c.seaNeighbors.map(id => idx.countries.get(String(id))).filter(Boolean).map(x => chipLink('country', x)).join('') : ''}</div>
     <div class="linkrow"><span>Settlements</span>${places.map(s => chipLink('settlement', s)).join('') || '—'}</div>
@@ -497,16 +481,12 @@ const DIALOGS = {
     <div class="actions"><button class="soft" data-report="${esc('country ' + n)}">${icon('list')} Country report</button><button class="soft" data-report="${esc('demographics ' + n)}">${icon('chart')} Demographics</button><button class="soft" data-report="${esc('discoveries ' + n)}">${icon('bulb')} Discoveries</button><button class="soft" data-report="${esc('wars ' + n)}">${icon('swords')} Wars</button></div>
     ${learningRow(c)}
     ${countryExtras(c)}
-    <h3 class="sub">Condition</h3><div class="sliders">${slider('Food', `set country ${n} food {value}`, c.food, 'cs-food')}${slider('Prosperity', `set country ${n} prosperity {value}`, c.prosperity, 'cs-prosperity')}${slider('Stability', `set country ${n} stability {value}`, c.stability, 'cs-stability')}</div>
-    <h3 class="sub">Governance</h3><div class="editgrid">${inlineSelect('Government', `set country ${n} government {value}`, GOVERNMENTS, c.government)}${inlineSelect('Economy', `set country ${n} economy {value}`, ECONOMIES, c.economicSystem)}${inline('Name', `set country ${n} name {q:value}`, c.name)}${inline('Treasury', `set country ${n} treasury {value}`, Math.round(c.treasury), { type: 'number' })}${inline('Research', `set country ${n} research {value}`, Math.round(c.research), { type: 'number' })}<label class="inline check-line"><input type="checkbox" data-tpl="${esc(`set country ${n} quarantine {value}`)}" ${c.quarantine ? 'checked' : ''}><span>Quarantine</span></label></div>
-    <h3 class="sub">Trigger a condition</h3><div class="chips">${EVENTS.map(ev => `<button class="chip warm" data-run="${esc(`trigger ${n} ${ev}`)}">${ev}</button>`).join('')}</div>
-    <form class="inline row" data-tpl="${esc(`disaster ${n} {type} severity={severity}`)}"><label><span>Disaster</span><select name="type">${DISASTERS.map(d => `<option>${d}</option>`).join('')}</select></label><label><span>Severity</span><select name="severity">${SEVERITIES.map(d => `<option ${d === 'major' ? 'selected' : ''}>${d}</option>`).join('')}</select></label><button class="soft">${icon('bolt')} Cause disaster</button></form>
-    <h3 class="sub">Diplomacy</h3><div class="editgrid"><form class="inline row" data-tpl="${esc(`war ${n} {q:other}`)}"><label><span>Declare war on</span><select name="other">${others.map(x => `<option>${esc(x)}</option>`).join('')}</select></label><button class="danger-btn" ${others.length ? '' : 'disabled'}>${icon('swords')} War</button></form><form class="inline row" data-tpl="${esc(`peace ${n} {q:other}`)}"><label><span>Make peace with</span><select name="other">${enemies.map(x => `<option>${esc(x)}</option>`).join('')}</select></label><button class="soft" ${enemies.length ? '' : 'disabled'}>${icon('flag')} Peace</button></form><form class="inline row" data-tpl="${esc(`trade science ${n} {q:other}`)}"><label><span>Trade science with</span><select name="other">${others.map(x => `<option>${esc(x)}</option>`).join('')}</select></label><button class="soft" ${others.length ? '' : 'disabled'}>${icon('bulb')} Trade science</button></form><form class="inline row" data-tpl="${esc(`trade pact ${n} {q:other}`)}"><label><span>Science pact with</span><select name="other">${others.map(x => `<option>${esc(x)}</option>`).join('')}</select></label><button class="soft" ${others.length ? '' : 'disabled'}>${icon('bulb')} Pact</button></form></div>${(c.pacts || []).length ? `<div class="linkrow"><span>Pacts</span>${c.pacts.map(id => idx.countries.get(String(id))).filter(Boolean).map(x => `<span class="tag" style="--c:${cc(x.id)}">${esc(x.name)}<button title="End the pact" aria-label="End the pact with ${esc(x.name)}" data-run="${esc(`trade end ${n} ${quote(x.name)}`)}">×</button></span>`).join('')}</div>` : ''}
-    <div class="actions">${others.length ? `<form class="inline row" data-tpl="${esc(`delete country ${n} to={q:to}`)}" data-confirm="Merge ${esc(c.name)} into the selected country?"><label><span>Merge into another country</span><select name="to">${others.map(x => `<option>${esc(x)}</option>`).join('')}</select></label><button class="danger-btn">${icon('trash')} Merge</button></form>` : ''}</div></div>`;
+    ${(c.pacts || []).length ? `<div class="linkrow"><span>Science pacts</span>${c.pacts.map(id => idx.countries.get(String(id))).filter(Boolean).map(x => chipLink('country', x)).join('')}</div>` : ''}
+    ${c.population > 0 ? `<h3 class="sub">Influence</h3><div class="actions"><button class="soft" data-influence-go="idea:${c.id}">${icon('bulb')} Seed an idea</button><button class="soft" data-influence-go="diplomacy:${c.id}">${icon('flag')} Shift diplomacy…</button></div>` : ''}</div>`;
   },
 
   disease(d) {
-    const n = quote(d.name), courseColor = { acute: '#ec4899', chronic: '#8b5cf6', endemic: '#f59e0b' }[d.course] || '#64748b';
+    const courseColor = { acute: '#ec4899', chronic: '#8b5cf6', endemic: '#f59e0b' }[d.course] || '#64748b';
     const [cases, rec, died, vac] = diseaseCounts(d.name), ready = d.cure >= 100 && d.active === 0, work = snap.researchers;
     const why = ready ? 'The cure is complete and nobody is infected. It is eradicated automatically at the end of the year, or you can do it now.' : `Eradication is automatic once the cure reaches 100% and nobody is infected. Right now: cure ${d.cure.toFixed(0)}%, ${num(d.active)} infected.`;
     return `${dlgHead(courseColor, `<span class="avatar xl sq" style="--c:${courseColor}">${icon('dna')}</span>`, 'DISEASE', d.name, `${tag(d.course, courseColor)}${tag(d.transmission || 'contact', '#64748b')}${cureStatus(d)}`)}
@@ -515,12 +495,21 @@ const DIALOGS = {
     <h3 class="sub">Cases per year</h3>${triChart(snap.healthStats.diseases[d.name]?.timeline || [])}
     <h3 class="sub">Cure and eradication</h3><div class="cure-box"><div class="cure-top"><b>${d.cure.toFixed(1)}%</b><span>cure progress</span></div><div class="meter big"><i style="width:${Math.max(1, d.cure)}%;background:#14b8a6"></i></div>
     <p class="muted">${num(work.scientists)} scientists and ${num(work.healers)} healers add to this every year. Healers count fully where the disease is active; medical technology speeds the work, and chronic diseases are slower to cure. A partial cure already lowers spread and deaths.</p>
-    <div class="actions"><button class="primary" ${ready ? '' : 'disabled'} data-run="${esc('eradicate ' + n)}" data-confirm="Eradicate ${esc(d.name)}? Historical records remain.">${icon('shield')} Eradicate</button><span class="muted why">${why}</span></div></div>
-    <div class="actions"><button class="soft" data-report="${esc('disease ' + n)}">${icon('list')} Full disease report</button></div>
-    <h3 class="sub">Tune this disease</h3><div class="editgrid">${inline('Cure progress (%)', `set disease ${n} cure {value}`, Math.round(d.cure), { type: 'number', step: 1 })}${inlineSelect('Course', `set disease ${n} course {value}`, ['acute', 'chronic', 'endemic'], d.course)}${inlineSelect('Transmission', `set disease ${n} transmission {value}`, ['contact', 'respiratory', 'waterborne'], d.transmission)}${inline('Infection (0–1)', `set disease ${n} infection {value}`, +Number(d.infectionChance).toFixed(4), { type: 'number', step: 'any' })}${inline('Death (0–1)', `set disease ${n} death {value}`, +Number(d.deathChance).toFixed(4), { type: 'number', step: 'any' })}${inline('Recovery (0–1)', `set disease ${n} recovery {value}`, +Number(d.recoveryChance).toFixed(4), { type: 'number', step: 'any' })}${inline('Immunity (years)', `set disease ${n} immunity {value}`, d.immunityYears ?? 8, { type: 'number', step: 1 })}</div>
-    <h3 class="sub">Start an outbreak</h3><form class="inline row" data-tpl="${esc(`outbreak {q:country} ${n} cases={cases}`)}"><label><span>Country</span><select name="country">${activeCountries().map(c => `<option>${esc(c.name)}</option>`).join('')}</select></label><label><span>Cases</span><input name="cases" type="number" min="1" value="5"></label><button class="soft">${icon('bolt')} Start outbreak</button></form></div>`;
+    <div class="actions"><button class="primary" ${ready ? '' : 'disabled'} data-run="${esc('eradicate ' + quote(d.name))}" data-confirm="Eradicate ${esc(d.name)}? Historical records remain.">${icon('shield')} Eradicate</button><span class="muted why">${why}</span></div></div>
+    <div class="actions"><button class="soft" data-report="${esc('disease ' + quote(d.name))}">${icon('list')} Full disease report</button></div></div>`;
   }
 };
+
+const UNITS = unitDialogs({ esc, num, tag, stat, dlgHead, icon, cc, progressBar, etaYears, snap: () => snap, idx: () => idx });
+
+// Read-only: which countries share what they learn. Changing it is an influence in the bottom bar.
+function diplomacyPanel() {
+  const pairs = [];
+  for (const c of activeCountries()) for (const id of c.pacts || []) if (c.id < id) { const o = idx.countries.get(String(id)); if (o && o.population > 0) pairs.push([c, o]); }
+  return panel('Diplomacy', 'Science pacts share what each side learns every year, until war breaks them', pairs.length
+    ? `<div class="rows">${pairs.map(([a, b]) => `<div class="lrow" style="--c:${cc(a.id)}"><span class="flag-dot sm">${icon('bulb')}</span><div><b>${esc(a.name)} and ${esc(b.name)}</b><small>Science pact</small></div><button class="soft" data-country="${a.id}">Open</button></div>`).join('')}</div>`
+    : empty('No science pacts yet. Use Shift diplomacy in the bar at the bottom to broker one.'));
+}
 
 function nearbyResources(s) {
   const g = snap.geo, found = {};
@@ -528,28 +517,16 @@ function nearbyResources(s) {
   return found;
 }
 function settlementExtras(s) {
-  const cat = snap.buildingCatalog || {}, country = idx.countries.get(String(s.country)), techs = new Set(country?.technologies || []);
   const built = Object.entries(s.buildings || {}), projects = snap.projects.filter(p => p.settlement === s.id), n = quote(s.name), near = nearbyResources(s);
-  const options = Object.entries(cat).filter(([k]) => !(s.buildings || {})[k] && !projects.some(p => p.kind === k)).map(([k, [label, cost, need, minPop, terr]]) => {
-    const miss = need.filter(t => !techs.has(t)).map(t => 'needs ' + t);
-    if (s.population < minPop) miss.push(`${minPop}+ residents`);
-    if (terr === 'coast' && !/coastal/.test(s.terrainText)) miss.push('coast');
-    if (terr === 'water' && !/coastal|riverside/.test(s.terrainText)) miss.push('water');
-    if (terr === 'river' && !/riverside/.test(s.terrainText)) miss.push('river');
-    if (terr === 'ore' && !['iron', 'copper', 'gold', 'coal', 'stone'].some(k => near[k])) miss.push('ore nearby');
-    if (k === 'hospital' && !(s.buildings || {}).clinic) miss.push('needs a clinic');
-    return `<option value="${k}">${esc(label)} · ${cost} work${miss.length ? ' · ' + esc(miss.join(', ')) : ''}</option>`;
-  }).join('');
   const hazards = Object.entries(s.hazards || {}).sort((a, b) => b[1] - a[1]);
   return `<h3 class="sub">Buildings and construction</h3>
     <div class="bchips">${built.length ? built.map(([k, y]) => bchip(k, y)).join('') : '<span class="muted">Nothing built yet.</span>'}</div>
     ${projects.map(p => `<div class="proj"><b>${esc(p.label)}</b> <span class="muted">${Math.round(p.progress * 100)}% · ${num(p.workers)} workers</span>${progressBar(p.progress, '#f59e0b')}</div>`).join('')}
-    <div class="editgrid"><label class="inline sel"><span>Start building</span><select data-tpl="${esc(`build ${n} {value}`)}"><option value="">Choose…</option>${options}</select></label></div>
     <h3 class="sub">Place and hazards</h3>
     <div class="statgrid">${stat('Terrain', esc(s.terrainText))}${stat('Cell', `${s.gx}, ${s.gy}`)}${stat('Land claimed', `${Math.min(16, 4 + Math.sqrt(s.population) * 0.55).toFixed(1)} cells`)}</div>
     <div class="linkrow"><span>Resources nearby</span>${Object.entries(near).map(([r, c]) => `<span class="lg"><i style="background:${RESOURCES[r].color}"></i>${RESOURCES[r].name} ×${c}</span>`).join('') || '<small class="muted">none</small>'}</div>
     <div class="bars hz">${hazards.map(([k, v]) => `<div class="hbar"><span>${cap(k)}</span><div class="meter"><i style="width:${Math.min(100, v * 25)}%;background:${HAZARD_STYLE[k]}"></i></div><b>${v.toFixed(1)}</b></div>`).join('')}</div>
-    <div class="actions"><button class="soft" data-focus-settlement="${s.id}">${icon('map')} Show on map</button><button class="soft" data-run="${esc(`settle ${n}`)}">${icon('compass')} Send settlers to found a town</button><button class="soft" data-report="${esc('hazards ' + n)}">${icon('list')} Hazard report</button></div>`;
+    <div class="actions"><button class="soft" data-focus-settlement="${s.id}">${icon('map')} Show on map</button>${s.population >= 20 && !s.abandoned ? `<button class="soft" data-influence-go="expedition:${s.id}">${icon('compass')} Spark an expedition from here</button>` : ''}<button class="soft" data-report="${esc('hazards ' + n)}">${icon('list')} Hazard report</button></div>`;
 }
 // What a country is part-way through learning from settlers, merchants and conquest (top few, by progress).
 function learningRow(c) {
@@ -574,20 +551,19 @@ function countryExtras(c) {
   const st = c.systems; if (!st) return '';
   const n = quote(c.name), biggest = livePlaces().filter(s => s.country === c.id).sort((a, b) => b.population - a.population)[0], parties = snap.expeditions.filter(e => e.country === c.id).length;
   return `<h3 class="sub">How this country works</h3><div class="statgrid">${stat('Science output', '×' + st.research.toFixed(2))}${stat('Culture', num(st.culture))}${stat('Trade', st.trade.toFixed(1))}${stat('Town-founding drive', '×' + st.expansion.toFixed(2))}${stat('Disease spread', '×' + st.infection_mult.toFixed(2))}${stat('Settler parties', parties)}</div>
-    <div class="actions"><button class="soft" data-systems-country="${c.id}">${icon('network')} See every effect</button>${biggest ? `<button class="soft" data-run="${esc(`settle ${quote(biggest.name)}`)}">${icon('compass')} Found a new town</button>` : ''}</div>`;
+    <div class="actions"><button class="soft" data-systems-country="${c.id}">${icon('network')} See every effect</button>${biggest ? `<button class="soft" data-influence-go="expedition:${biggest.id}">${icon('compass')} Spark an expedition</button>` : ''}</div>`;
 }
 
 const dlg = () => $('#detail-dialog');
 function showDialog(type, id) { dialog = { type, id: String(id) }; renderDialog(); if (!dlg().open) dlg().showModal(); }
-function lookup(type, id) { if (type === 'cell') { const [x, y] = String(id).split(',').map(Number); return snap?.geo && y >= 0 && y < snap.geo.h ? { id: String(id), x, y } : null; } return type === 'person' ? idx.people.get(id) : type === 'settlement' ? idx.settlements.get(id) : type === 'country' ? idx.countries.get(id) : snap.diseases.find(d => d.name === id); }
+function lookup(type, id) { if (UNIT_TYPES.includes(type)) return findUnit(snap, type, id); if (type === 'cell') { const [x, y] = String(id).split(',').map(Number); return snap?.geo && y >= 0 && y < snap.geo.h ? { id: String(id), x, y } : null; } return type === 'person' ? idx.people.get(id) : type === 'settlement' ? idx.settlements.get(id) : type === 'country' ? idx.countries.get(id) : snap.diseases.find(d => d.name === id); }
 function renderDialog() {
   if (!dialog) return;
   const item = lookup(dialog.type, dialog.id);
   if (!item) { dlg().close(); return; }
   const box = $('#detail-content'), top = box.scrollTop, same = box.dataset.key === `${dialog.type}:${dialog.id}`;
-  box.innerHTML = DIALOGS[dialog.type](item);
+  box.innerHTML = (DIALOGS[dialog.type] || UNITS[dialog.type])(item);
   box.dataset.key = `${dialog.type}:${dialog.id}`; box.scrollTop = same ? top : 0;
-  $$('form.tool', dlg()).forEach(updatePreview);
 }
 function refreshDialog() { if (dialog && dlg().open) renderDialog(); }
 function openReport(title, text) {
@@ -614,12 +590,9 @@ function renderTop() {
 function render(force = false) {
   if (!snap) return;
   renderNav(); renderTop();
-  const f = document.activeElement;
-  if (!force && section === 'workshop' && f && $('#content').contains(f) && /INPUT|SELECT|TEXTAREA/.test(f.tagName)) { refreshDialog(); return; }
   $('#content').innerHTML = VIEWS[section]();
   if (RESULTS[section]) renderResults();
   if (section === 'overview' || section === 'map') { $('#map-slot').append(mapHost); map.redraw(); renderLegend(); }
-  if (section === 'workshop') $$('form.tool').forEach(updatePreview);
   if (section === 'tech') { applyTechFilter(); const w = $('.techwrap'); if (w) { if (techScroll) { w.scrollLeft = techScroll.x; w.scrollTop = techScroll.y; } else w.scrollLeft = Number(w.dataset.scroll) || 0; } }
   refreshDialog();
 }
@@ -664,12 +637,19 @@ function switchSection(id) { section = id; view.search = ''; view.country = ''; 
 const mapHost = document.createElement('div'); mapHost.className = 'map-host';
 const map = new WorldMap(mapHost, {
   countryColor: id => cc(id),
-  onPick: (type, id) => { if (type === 'cell' && mapView !== 'geo') return; showDialog(type, id); },
+  onPick: hit => {
+    if (influences.armed && influences.pick(hit)) return;
+    if (hit.type === 'ping') { openPing(hit.item); return; }
+    if (hit.type === 'building') { showDialog('settlement', hit.sid); return; }
+    if (hit.type === 'cell' && mapView !== 'geo') return;
+    showDialog(hit.type, hit.id);
+  },
   onHover: (hit, e) => {
     const tip = $('#tooltip');
     if (!hit || !e) { tip.hidden = true; return; }
     const it = hit.item, rect = mapHost.getBoundingClientRect();
-    tip.innerHTML = hit.type === 'person'
+    tip.innerHTML = hit.type === 'ping' ? `<b>${esc(it.headline)}</b>${it.sub ? `<span>${esc(it.sub)}</span>` : ''}<span>Year ${it.year} · click to open</span>`
+      : hit.type === 'person'
       ? `<b>${esc(it.name)}</b><span>${esc(it.role || it.job || 'resident')} · age ${it.age}</span><span>${esc(it.settlementName)} · wealth ${num(it.wealth)}${it.infection ? ' · ' + esc(it.infection) : ''}</span>`
       : hit.type === 'expedition' ? `<b>${esc(it.countryName)} settlers</b><span>${it.people} people from ${esc(it.originName)}</span><span>${it.kind === 'found' ? 'Heading to found a new town' : 'Heading to ' + esc(it.targetName || 'a new home')} · about ${etaYears(it)} yr</span>`
       : hit.type === 'army' ? `<b>${esc(it.countryName)} army</b><span>${num(it.men)} ${esc(it.unit || 'soldiers')} from ${esc(it.originName)}</span><span>${it.state === 'besieging' ? 'Besieging' : 'Marching on'} ${esc(it.objectiveName)} (${esc(it.enemyName)})</span>`
@@ -678,12 +658,22 @@ const map = new WorldMap(mapHost, {
       : hit.type === 'cell' && it.terrain == null ? `<b>${it.owner ? esc(it.owner) : 'Unclaimed land'}</b><span>${it.contested ? 'Contested tile: fought over in a war' : 'Territory'}</span>`
       : hit.type === 'cell' ? `<b>${esc(it.terrain)}${it.river ? ' · river' : ''}</b><span>${it.owner ? esc(it.owner) + ' territory' : 'Unclaimed land'}${it.contested ? ' · contested' : ''}</span>${(it.deposits || []).map(d => `<span>${esc(RESOURCES[d.kind].name)} ${Math.round(d.amount)}/${d.cap}${d.locked ? ' · exhausted' : ''}</span>`).join('')}${it.features ? `<span>${[...it.features].map(c => FEATURES[c]).join(', ')}</span>` : ''}<span>cell ${it.x}, ${it.y}</span>`
       : `<b>${esc(it.name)}</b><span>${esc(cap(it.kind || 'settlement'))}${it.capital ? ' · capital' : ''} of ${esc(it.countryName)}</span><span>${num(it.population)} residents${it.terrainText ? ' · ' + esc(it.terrainText) : ''}</span>${Object.keys(it.buildings || {}).length ? `<span>${Object.keys(it.buildings).map(buildLabel).join(', ')}</span>` : ''}${Object.keys(it.sick || {}).length ? `<span>☣ ${Object.entries(it.sick).map(([k, v]) => `${esc(k)} ${v}`).join(', ')}</span>` : ''}${(snap.projects || []).filter(p => p.settlement === it.id).map(p => `<span>Building: ${esc(p.label)} ${Math.round(p.progress * 100)}%</span>`).join('')}`;
+    if (influences.armed) tip.innerHTML += `<em class="aim">${influences.hint(hit)}</em>`;
     tip.hidden = false;
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     tip.style.left = Math.min(x + 16, rect.width - tip.offsetWidth - 8) + 'px'; tip.style.top = Math.max(8, y - tip.offsetHeight - 14 < 0 ? y + 18 : y - tip.offsetHeight - 14) + 'px';
   }
 });
 window.__map = map; // handy for debugging and automated checks
+const pings = new Pings(); map.addLayer(pings); window.__pings = pings;
+const pingTray = document.createElement('div'); pingTray.className = 'ping-slot'; mapHost.append(pingTray);
+function renderTray() { pingTray.innerHTML = pings.tray(esc); }
+// Jump: the map centres on the event. Clicking the ping itself opens what it is about.
+function jumpPing(p) { pings.mark(p); focusMap(() => [p.x, p.y]); renderTray(); }
+function openPing(p) {
+  pings.mark(p); renderTray(); toast(`${p.headline}${p.sub ? ' · ' + p.sub : ''}`);
+  if (lookup(p.target.type, String(p.target.id))) showDialog(p.target.type, p.target.id);
+}
 const tooltip = document.createElement('div'); tooltip.id = 'tooltip'; tooltip.hidden = true; mapHost.append(tooltip);
 for (const [key, on] of Object.entries(geoOn)) map.geoOpts[key] = on;
 
@@ -737,44 +727,27 @@ function toast(text, kind = 'ok') {
   const box = $('#toasts'); box.append(el); while (box.children.length > 4) box.firstChild.remove();
   setTimeout(() => el.classList.add('out'), 4200); setTimeout(() => el.remove(), 4700);
 }
-function consoleShow(cmd, out, open) {
-  $('#console-output').textContent = out; $('#dock-cmd').textContent = '› ' + cmd;
-  if (open) $('#dock-out').hidden = false;
-}
 // to: 'toast' (edits from buttons/forms), 'report' (information dialogs), 'dock' (typed console commands)
 async function runCmd(text, { confirm: msg, to = 'toast' } = {}) {
-  text = text.trim(); if (!text) return;
-  if (msg && !window.confirm(msg)) return;
+  text = text.trim(); if (!text) return false;
+  if (msg && !window.confirm(msg)) return false;
   playing = false; stopFlag = true; updatePlay();
-  await work(async () => {
-    history.push(text); historyIndex = history.length;
+  return work(async () => {
     const r = await sim.command(text);
     setSnap(r.snapshot || await sim.getSnapshot());
     const out = Array.isArray(r.output) ? r.output.join('\n') : String(r.output || 'Command completed.');
-    consoleShow(text, out, to === 'dock');
+    if (to === 'dock') console_.show(text, out);
     if (to === 'report') openReport(text, out);
     else if (to === 'dock') { if (r.action === 'edit') toast(firstLine(out), 'ok'); }
     else toast(firstLine(out), r.action === 'edit' || r.action === 'next' ? 'ok' : 'warn');
-    if (to === 'dock') $('#command').value = '';
     render(true);
   });
 }
 
-// ---------- templates and forms ----------
-const fill = (tpl, vals) => tpl.replace(/\{(q:)?(\w+)\}/g, (_, q, k) => (q ? quote(vals[k] ?? '') : String(vals[k] ?? '')));
-function updatePreview(form) {
-  const tool = toolById(form.dataset.tool); if (!tool) return;
-  const v = collect(form), box = $('[data-preview]', form), hint = $('[data-hint]', form), cmd = previewFor(tool, v);
-  box.textContent = cmd || 'Fill in the fields to preview the command.'; box.classList.toggle('ready', !!cmd);
-  if (hint) hint.textContent = tool.hint?.(v) || '';
-  toolValues[tool.id] = v;
-}
+// ---------- inputs ----------
 document.addEventListener('input', e => {
   const t = e.target;
   if (t.id === 'search') { view.search = t.value; view.page = 0; if (section === 'tech') applyTechFilter(); else renderResults(); }
-  const f = t.closest('form.tool'); if (f) updatePreview(f);
-  if (t.dataset.live) $('#' + t.dataset.live).textContent = t.step && Number(t.step) < 1 ? Number(t.value).toFixed(3) : t.value;
-  if (t.dataset.pick) showPick(t);
   if (t.id === 'map-people') { showPeople = t.checked; map.setShowPeople(showPeople); }
   if (t.dataset.geo) { geoOn[t.dataset.geo] = t.checked; map.setGeoOption(t.dataset.geo, t.checked); }
 });
@@ -786,113 +759,47 @@ document.addEventListener('change', e => {
     if (k === 'country' && (section === 'demographics' || section === 'discoveries')) render(true); else renderResults();
     return;
   }
-  const f = t.closest('form.tool'); if (f) updatePreview(f);
-  if (t.matches('[data-tpl]:not(form)')) {
-    if (t.type === 'range' || t.tagName === 'SELECT' || t.type === 'checkbox') {
-      const value = t.type === 'checkbox' ? (t.checked ? 'on' : 'off') : t.value;
-      if (value === '') return;
-      runCmd(fill(t.dataset.tpl, { value }));
-    }
-  }
 });
-document.addEventListener('submit', e => {
-  const f = e.target;
-  if (f.matches('form[data-tpl]')) {
-    e.preventDefault(); const vals = Object.fromEntries(new FormData(f)); runCmd(fill(f.dataset.tpl, vals), { confirm: f.dataset.confirm }); return;
-  }
-  if (f.matches('form.tool')) {
-    e.preventDefault(); const tool = toolById(f.dataset.tool), cmd = previewFor(tool, collect(f));
-    if (!cmd) { toast('Fill in the required fields first.', 'warn'); return; }
-    runCmd(cmd, { to: tool.report ? 'report' : 'toast', confirm: tool.danger ? `Run: ${cmd}?` : undefined });
-  }
-});
+// ---------- console (hidden behind ~) ----------
+const console_ = new Console({ $, $$, esc, quote, num, run: text => runCmd(text, { to: 'dock' }), snap: () => snap, idx: () => idx, places: () => livePlaces() });
 
-// ---------- name pickers ----------
-function pickMatches(type, q) {
-  q = q.trim().toLowerCase();
-  let list;
-  if (type === 'person') list = idx.living.map(p => ({ name: p.name, meta: `${p.settlementName} · #${p.id}`, id: String(p.id) }));
-  else if (type === 'settlement') list = livePlaces().map(s => ({ name: s.name, meta: s.countryName, id: String(s.id) }));
-  else if (type === 'discovery') list = (snap.discoveryNames || []).map(name => ({ name, meta: '' }));
-  else if (type === 'lineage') list = [...new Set(snap.lineages || [])].map(name => ({ name, meta: '' }));
-  else list = [];
-  if (!q) return list.slice(0, 10);
-  const starts = [], inside = [], num_ = /^#?\d+$/.test(q) ? q.replace('#', '') : null;
-  for (const it of list) {
-    const l = it.name.toLowerCase();
-    if (num_ && it.id === num_) starts.unshift(it); else if (l.startsWith(q)) starts.push(it); else if (l.includes(q)) inside.push(it);
-    if (starts.length >= 10) break;
-  }
-  return [...starts, ...inside].slice(0, 10);
+// ---------- influences ----------
+// What a map click points at, in the terms an influence needs.
+function resolveHit(hit) {
+  const g = snap?.geo; if (!g) return null;
+  let s = null, cid = null, cell = null;
+  const town = id => { const x = idx.settlements.get(String(id)); return x && !x.abandoned && x.population > 0 ? x : null; };
+  if (hit.type === 'settlement' || hit.type === 'building') s = town(hit.type === 'building' ? hit.sid : hit.id);
+  else if (hit.type === 'ping') { if (hit.item.target.type === 'settlement') s = town(hit.item.target.id); else if (hit.item.target.type === 'country') cid = hit.item.target.id; else cell = hit.item.target.id.split(',').map(Number); }
+  else if (hit.type === 'cell') cell = [hit.cx, hit.cy];
+  else if (UNIT_TYPES.includes(hit.type)) { cell = hit.item.path[hit.item.index]; cid = hit.item.country; s = livePlaces().find(x => x.gx === cell[0] && x.gy === cell[1]) || null; } // whatever stands where the unit is
+  else if (hit.item?.country != null) cid = hit.item.country;
+  if (s) { cid = s.country; cell = [s.gx, s.gy]; }
+  if (cell && cid == null) cid = map.owner[cell[1]]?.[cell[0]] || nearestTown(cell)?.country;
+  const c = cid != null ? idx.countries.get(String(cid)) : null, k = cell ? g.terrain[cell[1]][cell[0]] : null;
+  return {
+    settlement: s && { id: s.id, name: s.name, country: s.country }, country: c && c.population > 0 ? { id: c.id, name: c.name } : null,
+    cell, terrain: k, water: k === 'o' || k === 'l', river: cell ? g.river[cell[1]][cell[0]] === '1' : false,
+    coast: !!cell && [-1, 0, 1].some(dy => [-1, 0, 1].some(dx => g.terrain[cell[1] + dy]?.[cell[0] + dx] === 'o'))
+  };
 }
-function drawPick(list, items, renderItem) {
-  list.hidden = !items.length;
-  list.innerHTML = items.map((it, i) => renderItem(it, i)).join('');
+function nearestTown([x, y]) {
+  let best = null, bd = Infinity;
+  for (const s of livePlaces()) { const d = (s.gx - x) ** 2 + (s.gy - y) ** 2; if (d < bd) { bd = d; best = s; } }
+  return best;
 }
-function showPick(input) {
-  const list = input.closest('.pick-wrap')?.querySelector('.pick-list'); if (!list || !snap) return;
-  drawPick(list, pickMatches(input.dataset.pick, input.value), (it, i) => `<button type="button" class="pick-item ${i === 0 ? 'active' : ''}" data-pick-value="${esc(it.name)}"><b>${esc(it.name)}</b><small>${esc(it.meta)}</small></button>`);
-}
-function applyPick(item) {
-  const wrap = item.closest('.pick-wrap'), input = wrap.querySelector('input');
-  input.value = item.dataset.pickValue; wrap.querySelector('.pick-list').hidden = true;
-  input.dispatchEvent(new Event('input', { bubbles: true })); input.focus();
-}
-document.addEventListener('focusin', e => { if (e.target.dataset?.pick) showPick(e.target); });
-document.addEventListener('focusout', e => { if (e.target.dataset?.pick) setTimeout(() => { const l = e.target.closest('.pick-wrap')?.querySelector('.pick-list'); if (l) l.hidden = true; }, 150); });
-document.addEventListener('mousedown', e => { const it = e.target.closest('.pick-item[data-pick-value]'); if (it) { e.preventDefault(); applyPick(it); } });
-document.addEventListener('keydown', e => {
-  const input = e.target.closest?.('[data-pick]'); if (!input) return;
-  const list = input.closest('.pick-wrap').querySelector('.pick-list'), items = $$('.pick-item', list);
-  if (list.hidden || !items.length) return;
-  let i = items.findIndex(x => x.classList.contains('active'));
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); items[i]?.classList.remove('active'); i = (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; items[i].classList.add('active'); items[i].scrollIntoView({ block: 'nearest' }); }
-  else if (e.key === 'Enter' || e.key === 'Tab') { if (i >= 0) { e.preventDefault(); applyPick(items[i]); } }
-  else if (e.key === 'Escape') { list.hidden = true; e.stopPropagation(); }
+const influences = new InfluenceBar($('#influences'), {
+  run: text => runCmd(text), resolve: resolveHit, quote, esc, icon, toast,
+  onArm: on => { mapHost.classList.toggle('aiming', on); if (on && section !== 'overview' && section !== 'map') { $$('dialog[open]').forEach(d => d.close()); switchSection('map'); } }
 });
-
-// ---------- console ----------
-function consoleContext() {
-  const input = $('#command'), text = input.value.slice(0, input.selectionStart ?? input.value.length);
-  const open = (text.match(/(^|[^\\])"/g) || []).length % 2 === 1;
-  const start = open ? text.lastIndexOf('"') : text.lastIndexOf(' ') + 1;
-  return { text, start, partial: text.slice(open ? start + 1 : start), rest: input.value.slice(text.length) };
+window.__influences = influences;
+// Influence shortcuts inside dialogs: an idea runs at once; the others start aiming with the first choice made.
+function influenceGo(kind, id) {
+  $$('dialog[open]').forEach(d => d.close());
+  if (kind === 'idea') { const c = idx.countries.get(id); if (c) runCmd(`inspire ${quote(c.name)}`); return; }
+  const item = kind === 'expedition' ? idx.settlements.get(id) : idx.countries.get(id); if (!item) return;
+  influences.arm(kind, [{ id: item.id, name: item.name, country: item.country ?? item.id }]);
 }
-function consoleMatches() {
-  const { partial } = consoleContext(), q = partial.trim().toLowerCase();
-  if (!snap || q.length < 2 || partial.includes('=')) return [];
-  const verb = $('#command').value.trim().split(/\s+/)[0]?.toLowerCase(), out = [];
-  const add = (type, name, meta) => { if (name.toLowerCase().includes(q)) out.push({ type, name, meta, starts: name.toLowerCase().startsWith(q) }); };
-  snap.countries.forEach(c => add('country', c.name, `${num(c.population)} residents`));
-  livePlaces().forEach(s => add('settlement', s.name, s.countryName));
-  snap.diseases.forEach(d => add('disease', d.name, d.course));
-  if (['grant', 'revoke', 'catalog'].includes(verb)) (snap.discoveryNames || []).forEach(n => add('discovery', n, ''));
-  if (out.length < 10) for (const p of idx.living) { add('person', p.name, `${p.settlementName} · #${p.id}`); if (out.length >= 40) break; }
-  return out.sort((a, b) => b.starts - a.starts).slice(0, 10);
-}
-function drawConsolePick() {
-  const list = $('#console-pick'), items = consoleMatches();
-  delete list.dataset.nav;
-  drawPick(list, items, (it, i) => `<button type="button" class="pick-item ${i === 0 ? 'active' : ''}" data-cpick="${esc(it.name)}"><span class="ptype" data-t="${it.type}">${it.type}</span><b>${esc(it.name)}</b><small>${esc(it.meta)}</small></button>`);
-}
-function applyConsolePick(name) {
-  const input = $('#command'), { text, start, rest } = consoleContext(), before = text.slice(0, start), ins = quote(name) + ' ';
-  input.value = before + ins + rest.trimStart(); const pos = (before + ins).length; input.setSelectionRange(pos, pos); input.focus(); $('#console-pick').hidden = true;
-}
-$('#command').addEventListener('input', drawConsolePick);
-$('#command').addEventListener('blur', () => setTimeout(() => { $('#console-pick').hidden = true; }, 150));
-document.addEventListener('mousedown', e => { const it = e.target.closest('[data-cpick]'); if (it) { e.preventDefault(); applyConsolePick(it.dataset.cpick); } });
-$('#command').addEventListener('keydown', e => {
-  const list = $('#console-pick'), items = $$('.pick-item', list), shown = !list.hidden && items.length;
-  if (shown && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); list.dataset.nav = '1'; let i = items.findIndex(x => x.classList.contains('active')); items[i]?.classList.remove('active'); i = (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; items[i].classList.add('active'); return; }
-  // Tab accepts the highlighted suggestion; Enter accepts it only after arrow-key navigation, otherwise it runs the command.
-  if (shown && (e.key === 'Tab' || (e.key === 'Enter' && list.dataset.nav))) { e.preventDefault(); applyConsolePick((items.find(x => x.classList.contains('active')) || items[0]).dataset.cpick); return; }
-  if (e.key === 'Escape') { list.hidden = true; return; }
-  if (e.key === 'ArrowUp' && history.length) { e.preventDefault(); historyIndex = Math.max(0, historyIndex - 1); e.target.value = history[historyIndex]; }
-  if (e.key === 'ArrowDown') { e.preventDefault(); historyIndex = Math.min(history.length, historyIndex + 1); e.target.value = history[historyIndex] || ''; }
-});
-$('#command-form').onsubmit = e => { e.preventDefault(); $('#console-pick').hidden = true; runCmd($('#command').value, { to: 'dock' }); };
-$('#dock-close').onclick = () => { $('#dock-out').hidden = true; };
 
 // ---------- global clicks ----------
 document.addEventListener('click', e => {
@@ -900,8 +807,8 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-tab]'))) { $$('dialog[open]').forEach(d => d.close()); switchSection(el.dataset.tab); return; }
   if ((el = t.closest('[data-run]'))) { runCmd(el.dataset.run, { confirm: el.dataset.confirm }); return; }
   if ((el = t.closest('[data-report]'))) { runCmd(el.dataset.report, { to: 'report' }); return; }
-  if ((el = t.closest('[data-command]'))) { runCmd(el.dataset.command, { to: 'dock' }); return; }
-  if ((el = t.closest('[data-prefill]'))) { $('#command').value = el.dataset.prefill; $('#command').focus(); return; }
+  if ((el = t.closest('[data-ping]'))) { const p = pings.find(el.dataset.ping); if (p) jumpPing(p); return; }
+  if ((el = t.closest('[data-influence-go]'))) { const [kind, id] = el.dataset.influenceGo.split(':'); influenceGo(kind, id); return; }
   if ((el = t.closest('[data-map-view]'))) { mapView = el.dataset.mapView; map.setView(mapView); render(true); return; }
   if ((el = t.closest('[data-news]'))) { const item = newsItems[Number(el.dataset.news)]; if (item) openReport(`${item.tag} · Year ${item.year}`, `${item.headline}${item.sub ? '\n' + item.sub : ''}${item.message ? '\n\n' + item.message : ''}`); return; }
   if ((el = t.closest('[data-focus-settlement]'))) { focusMap(() => { const s = idx.settlements.get(el.dataset.focusSettlement); return s && s.gx != null ? cellXY(s) : null; }); return; }
@@ -913,8 +820,6 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-map-mode]'))) { mapMode = el.dataset.mapMode; map.setMode(mapMode); $$('[data-map-mode]').forEach(b => b.classList.toggle('on', b === el)); renderLegend(); return; }
   if ((el = t.closest('[data-tech-only]'))) { view.techOnly = view.techOnly === el.dataset.techOnly ? '' : el.dataset.techOnly; $$('[data-tech-only]').forEach(b => b.classList.toggle('on', b.dataset.techOnly === view.techOnly)); applyTechFilter(); return; }
   if ((el = t.closest('[data-event-cat]'))) { view.eventCat = el.dataset.eventCat; $$('[data-event-cat]').forEach(b => b.classList.toggle('on', b === el)); renderResults(); return; }
-  if ((el = t.closest('[data-tool-group]'))) { view.toolGroup = el.dataset.toolGroup; render(true); return; }
-  if ((el = t.closest('[data-open-tool]'))) { const tool = toolById(el.dataset.openTool); view.toolGroup = tool.group; switchSection('workshop'); setTimeout(() => $(`[data-tool="${tool.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); return; }
   if ((el = t.closest('[data-page]'))) { view.page += el.dataset.page === 'next' ? 1 : -1; renderResults(); $('#content').scrollIntoView({ block: 'start' }); return; }
   for (const type of ['person', 'settlement', 'country', 'disease']) if ((el = t.closest(`[data-${type}]`))) { showDialog(type, el.dataset[type]); return; }
   if ((el = t.closest('[data-copy]'))) { navigator.clipboard?.writeText($('#report-text').textContent); toast('Copied to clipboard.'); return; }
@@ -924,7 +829,7 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[role=button][data-person],[role=button][data-settlement],[role=button][data-country],[role=button][data-disease]')) { e.preventDefault(); e.target.click(); return; }
   if (e.key === 'Enter' && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && snap && !e.target.closest('input,textarea,select,button,a,dialog,[role=button]')) { e.preventDefault(); runYears(1); return; }
-  if (e.key === '/' && !e.target.closest('input,textarea,select')) { e.preventDefault(); $('#command').focus(); }
+  if (e.key === 'Escape' && influences.armed && !$('dialog[open]')) { influences.cancel(); }
 });
 dlg().addEventListener('close', () => { dialog = null; });
 

@@ -4,8 +4,8 @@ import {replaceState, KeyError, TupleMap, ValueError, addAll, capitalize, deepCl
 import {resolve_entity} from './inspection.js';
 import {_history, retire_disease, _local_outbreak, cure_progress} from './epidemiology.js';
 import {initialize_civic, refresh_public_roles, PAY, SYSTEMS} from './civic.js';
-import {maintain_rulers, TECHNOLOGIES, FOOD_TECHS, unlock, pass_on_knowledge, pacts_of, end_pact} from './society.js';
-import {ANY, met as tech_met} from './technology.js';
+import {maintain_rulers, TECHNOLOGIES, FOOD_TECHS, unlock, pass_on_knowledge, pacts_of, end_pact, learn, insight_of} from './society.js';
+import {ANY, met as tech_met, researchable} from './technology.js';
 import {INNOVATIONS, award_innovation} from './discoveries.js';
 import {Country, Sickness} from './civsim.js';
 import {_transfer} from './warfare.js';
@@ -14,7 +14,7 @@ import {ensure_placed, hazards_at, W, H, world, WATER} from './geography.js';
 import {BUILDINGS, start_project, launch_expedition} from './development.js';
 import {GOVERNMENTS} from './governments.js';
 
-export const EDIT_HELP = 'Editing commands (no command advances the year):\nUse names from people/settlements/countries. Quote names containing spaces.\nInclude Roman numerals and the country suffix when needed to distinguish people.\nset person PERSON name|age|wealth|fame|job|lineage|settlement|country VALUE\nset country COUNTRY name|government|economy|food|prosperity|stability|research|treasury|capacity|ruler|quarantine VALUE\nset settlement SETTLEMENT name|country VALUE\nset simulation war_chance|country_chance|lineage_chance|disaster_chance VALUE\nadd person SETTLEMENT [name=Ada age=0 surname=Vale lineage=LINEAGE parent=PERSON]\n  Choose surname OR lineage OR parent; parent may contain two comma-separated names in quotes.\ndelete person PERSON  (records a death; ancestry and the person\'s archive remain)\nmove person PERSON SETTLEMENT\nadd settlement COUNTRY [name=Newtown founder=PERSON residents=10]\n  Relocates existing residents; default is one adult founder.\ndelete settlement SETTLEMENT to=DESTINATION  (relocates residents; keeps its history)\nadd country SETTLEMENT [name=Newland]  (the settlement secedes)\ndelete country COUNTRY to=DESTINATION  (merges population and territory)\nadd lineage PERSON [surname=Vale]  (found a family branch)\nadd disease NAME [course=acute infection=.35 death=.02 recovery=.85 transmission=contact immunity=8]\nset disease NAME course|infection|death|recovery|transmission|immunity VALUE\ninfect PERSON DISEASE | cure PERSON | outbreak COUNTRY DISEASE [cases=5]\neradicate DISEASE | delete disease NAME  (needs a 100% cure and no current infections; keeps records)\nset disease NAME cure 0-100  (scientists and healers raise cure progress each year)\ngrant COUNTRY DISCOVERY_NAME | revoke COUNTRY DISCOVERY_NAME\n  grant requires prerequisites; revoke also removes dependent discoveries.\ncatalog [QUERY] [page=N] | diseases | wars | changes  (information only)\nwar COUNTRY COUNTRY [force=true] | peace COUNTRY COUNTRY [years=5]\n  force=true explicitly breaks an existing truce.\ntrade science COUNTRY COUNTRY  (each learns part of a discovery the other holds; not during a war)\ntrade pact COUNTRY COUNTRY | trade end COUNTRY COUNTRY  (a standing science pact; war ends it)\ntrigger COUNTRY Famine|Drought|Panic|Health|Calm|Safety|Abundance\ndisaster COUNTRY flood|storm|wildfire|earthquake|landslide|blizzard [severity=minor|major|severe] [at=SETTLEMENT]\n  The disaster is centered on that settlement (default: the country\'s riskiest) and can reach neighbors.\nbuild SETTLEMENT KIND [force=true] | build SETTLEMENT road to=SETTLEMENT\n  KIND: well granary market school library university observatory clinic hospital aqueduct walls harbor\n  levee firebreak foundations monument theater mine mill. Needs technology unless force=true.\nsettle SETTLEMENT [x=CELL y=CELL] [size=N]  (send settlers to found a new town; they travel for years)\nundo  (restore the most recent edit; unavailable after advancing a year)\nExamples (substitute names from your world):\n  set person "Mara Vale II of Arden" wealth 500\n  add person "River Town" name=Ada age=25 surname=Vale\nNames are the normal controls. Optional advanced shortcut: ids person Mara looks up numeric IDs.\nEditing is immediate. Natural yearly births/deaths remain separate from editor additions/deaths.';
+export const EDIT_HELP = 'Editing commands (no command advances the year):\nUse names from people/settlements/countries. Quote names containing spaces.\nInclude Roman numerals and the country suffix when needed to distinguish people.\nset person PERSON name|age|wealth|fame|job|lineage|settlement|country VALUE\nset country COUNTRY name|government|economy|food|prosperity|stability|research|treasury|capacity|ruler|quarantine VALUE\nset settlement SETTLEMENT name|country VALUE\nset simulation war_chance|country_chance|lineage_chance|disaster_chance VALUE\nadd person SETTLEMENT [name=Ada age=0 surname=Vale lineage=LINEAGE parent=PERSON]\n  Choose surname OR lineage OR parent; parent may contain two comma-separated names in quotes.\ndelete person PERSON  (records a death; ancestry and the person\'s archive remain)\nmove person PERSON SETTLEMENT\nadd settlement COUNTRY [name=Newtown founder=PERSON residents=10]\n  Relocates existing residents; default is one adult founder.\ndelete settlement SETTLEMENT to=DESTINATION  (relocates residents; keeps its history)\nadd country SETTLEMENT [name=Newland]  (the settlement secedes)\ndelete country COUNTRY to=DESTINATION  (merges population and territory)\nadd lineage PERSON [surname=Vale]  (found a family branch)\nadd disease NAME [course=acute infection=.35 death=.02 recovery=.85 transmission=contact immunity=8]\nset disease NAME course|infection|death|recovery|transmission|immunity VALUE\ninfect PERSON DISEASE | cure PERSON | outbreak COUNTRY DISEASE [cases=5]\neradicate DISEASE | delete disease NAME  (needs a 100% cure and no current infections; keeps records)\nset disease NAME cure 0-100  (scientists and healers raise cure progress each year)\ngrant COUNTRY DISCOVERY_NAME | revoke COUNTRY DISCOVERY_NAME\n  grant requires prerequisites; revoke also removes dependent discoveries.\ncatalog [QUERY] [page=N] | diseases | wars | changes  (information only)\nwar COUNTRY COUNTRY [force=true] | peace COUNTRY COUNTRY [years=5]\n  force=true explicitly breaks an existing truce.\ntrade science COUNTRY COUNTRY  (each learns part of a discovery the other holds; not during a war)\ntrade pact COUNTRY COUNTRY | trade end COUNTRY COUNTRY  (a standing science pact; war ends it)\ntrigger COUNTRY Famine|Drought|Panic|Health|Calm|Safety|Abundance\ndisaster COUNTRY flood|storm|wildfire|earthquake|landslide|blizzard [severity=minor|major|severe] [at=SETTLEMENT | x=CELL y=CELL]\n  The disaster is centered on that settlement (default: the country\'s riskiest) and can reach neighbors.\nbuild SETTLEMENT KIND [force=true] | build SETTLEMENT road to=SETTLEMENT\n  KIND: well granary market school library university observatory clinic hospital aqueduct walls harbor\n  levee firebreak foundations monument theater mine mill. Needs technology unless force=true.\nsettle SETTLEMENT [x=CELL y=CELL] [size=N]  (send settlers to found a new town; they travel for years)\ninspire COUNTRY [DISCOVERY]  (seed an idea: a third of a discovery the country is ready for, scaled by its research power)\nundo  (restore the most recent edit; unavailable after advancing a year)\nExamples (substitute names from your world):\n  set person "Mara Vale II of Arden" wealth 500\n  add person "River Town" name=Ada age=25 surname=Vale\nNames are the normal controls. Optional advanced shortcut: ids person Mara looks up numeric IDs.\nEditing is immediate. Natural yearly births/deaths remain separate from editor additions/deaths.';
 
 export const EDIT_VERBS = new Set([
   'set',
@@ -35,6 +35,7 @@ export const EDIT_VERBS = new Set([
   'disaster',
   'build',
   'settle',
+  'inspire',
   'undo'
 ]);
 
@@ -749,15 +750,23 @@ function _trade(sim, args) {
 
 function _disaster(sim, args) {
   if (args.length < 2) {
-    throw new ValueError('Usage: disaster COUNTRY TYPE [severity=major] [at=SETTLEMENT]');
+    throw new ValueError('Usage: disaster COUNTRY TYPE [severity=major] [at=SETTLEMENT | x=CELL y=CELL]');
   }
   const c = _country(sim, args[0]);
   const disaster = _choice(args[1], KINDS);
-  const options = _options(args.slice(2), new Set(['severity', 'at']));
+  const options = _options(args.slice(2), new Set(['severity', 'at', 'x', 'y']));
   const severity = _choice(options.get('severity') ?? 'major', ['minor', 'major', 'severe']);
   ensure_placed(sim);
   let site;
-  if (options.has('at')) {
+  if (options.has('x') || options.has('y')) {
+    if (!options.has('x') || !options.has('y') || options.has('at')) {
+      throw new ValueError('Give both x and y, or at=SETTLEMENT, not both.');
+    }
+    site = {gx: _number(options.get('x'), 0, W - 1, true), gy: _number(options.get('y'), 0, H - 1, true)};
+    if (WATER.includes(world(sim).get('terrain')[site.gy][site.gx])) {
+      throw new ValueError('That cell is water.');
+    }
+  } else if (options.has('at')) {
     site = _settlement(sim, options.get('at'));
   } else {
     const places = [...sim.settlements.values()].filter(s => s.country === c.id && s.abandoned == null);
@@ -822,6 +831,38 @@ function _settle(sim, args) {
   return `${exp.get('people').length} settlers set out from ${s.name} toward cell ${x},${y}.`;
 }
 
+/** Seed an idea: a third of a ready discovery's cost becomes part-learned insight. Deterministic, so it draws no random numbers. */
+function _inspire(sim, args) {
+  if (args.length < 1 || args.length > 2) {
+    throw new ValueError('Usage: inspire COUNTRY [DISCOVERY]');
+  }
+  const c = _country(sim, args[0]);
+  const ready = researchable(c.technologies);
+  if (ready.length === 0) {
+    throw new ValueError(`${c.name} is not ready for any new discovery.`);
+  }
+  let name;
+  if (args.length === 2) {
+    const query = args[1].toLowerCase();
+    name = ready.find(n => n.toLowerCase() === query);
+    if (name == null) {
+      const known = [...TECHNOLOGIES.keys()].find(n => n.toLowerCase() === query);
+      throw new ValueError(known ? `${c.name} is not ready for ${known}: it lacks a prerequisite, already knows it, or it is too many ages ahead.` : `Unknown discovery: ${args[1]}.`);
+    }
+  } else {
+    // the current project first, then whatever is already furthest along, then the cheapest
+    const store = insight_of(c), cost = n => TECHNOLOGIES.get(n)[1];
+    name = ready.includes(c.research_project) ? c.research_project
+      : sorted(ready, {key: n => [-(store.get(n) ?? 0) / cost(n), cost(n), n]})[0];
+  }
+  const cost = TECHNOLOGIES.get(name)[1];
+  if (learn(sim, c, name, cost / 3) <= 0) {
+    throw new ValueError(`${c.name} could not take up an idea about ${name}.`);
+  }
+  const share = Math.min(100, (insight_of(c).get(name) ?? 0) / cost * 100);
+  return `An idea about ${name} took hold in ${c.name}; it is ${fixed(share, 0)}% of the way to the discovery${share >= 100 ? ' and will be made next year' : ''}.`;
+}
+
 export function _execute(sim, verb, args) {
   if (verb === 'set') {
     return _set(sim, args);
@@ -879,6 +920,9 @@ export function _execute(sim, verb, args) {
   }
   if (verb === 'settle') {
     return _settle(sim, args);
+  }
+  if (verb === 'inspire') {
+    return _inspire(sim, args);
   }
   throw new ValueError('Unknown edit. Type help edit.');
 }

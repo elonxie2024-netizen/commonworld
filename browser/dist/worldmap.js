@@ -64,6 +64,7 @@ export class WorldMap {
     this.expAnim = new Map(); this.tileMs = 0; this.animMs = 0; this.lastIndex = new Map(); this.loop = 0; this.lastFrame = 0;
     this.terrainCanvas = null; this.terrainKey = '';
     this.hover = null;
+    this.layers = []; // extra overlay layers: { draw(ctx, now, map), hit(vx, vy, map), live() }
     this.dotR = 1.5;
     this.snap = null;
     new ResizeObserver(() => this.redraw()).observe(host);
@@ -71,7 +72,7 @@ export class WorldMap {
     host.addEventListener('pointerleave', () => this.setHover(null));
     host.addEventListener('click', e => {
       if (this.moved) { this.moved = false; return; }
-      const hit = this.find(e); if (hit?.type === 'building') this.onPick?.('settlement', hit.sid); else if (hit && ['person', 'settlement', 'cell'].includes(hit.type)) this.onPick?.(hit.type, hit.id);
+      const hit = this.find(e); if (hit) this.onPick?.(hit);
     });
     host.addEventListener('wheel', e => { e.preventDefault(); this.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0018)); }, { passive: false });
     host.addEventListener('pointerdown', e => { if (e.target.closest('.map-zoom')) return; this.drag = { x: e.clientX, y: e.clientY, px: this.panX, py: this.panY }; this.moved = false; });
@@ -204,7 +205,7 @@ export class WorldMap {
     ctx.setTransform(s * this.zoom, 0, 0, s * this.zoom, s * this.panX, s * this.panY);
     if (this.zoomLabel) this.zoomLabel.textContent = Math.round(this.zoom * 100) + '%';
     if (this.view === 'geo') { this.drawGeo(ctx); this.drawOver(); this.ensureLoop(); return; }
-    if (this.view === 'political') { this.drawPolitical(ctx); this.drawOver(); return; }
+    if (this.view === 'political') { this.drawPolitical(ctx); this.drawOver(); this.ensureLoop(); return; }
     const bg = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, 700);
     bg.addColorStop(0, '#1b2559'); bg.addColorStop(1, '#0a0e26'); ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(148,163,255,.12)';
@@ -630,8 +631,10 @@ export class WorldMap {
   }
 
   // ------------------------------------------------------------------ dynamic layer
+  addLayer(layer) { this.layers.push(layer); this.ensureLoop(); }
   needsLoop() {
     const s = this.snap;
+    if (this.view !== 'clusters' && this.host.isConnected && this.layers.some(l => l.live?.())) return true;
     return !!(s && this.view === 'geo' && this.host.isConnected && ((s.expeditions || []).length || (s.armies || []).length || (s.caravans || []).length || (s.projects || []).length || (s.disasters || []).some(d => d.year >= s.year - 1) || this.geoSites.some(x => x.sick && Object.keys(x.sick).length)));
   }
   ensureLoop() {
@@ -747,6 +750,7 @@ export class WorldMap {
         if (css >= 0.9) pill(`${e.people} ${e.kind === 'emigrant' ? 'newcomers' : 'settlers'}${sea ? ' · by sea' : ''}`, pos.x, pos.y + 12, 'rgba(8,12,34,.88)', '#fff', 9.5 / css);
       }
     }
+    if (this.view !== 'clusters' && snap?.geo) for (const l of this.layers) l.draw(ctx, now, this);
     this.drawNames(ctx);
     const h = this.hover; if (!h) return;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.shadowColor = '#fff'; ctx.shadowBlur = 12;
@@ -786,6 +790,7 @@ export class WorldMap {
     const g = this.snap?.geo; if (!g) return null;
     const now = performance.now(), slack = Math.max(0, 6 / this.zoom), political = this.view === 'political';
     const gopt = this.geoOpts;
+    for (const l of this.layers) { const hit = l.hit?.(vx, vy, this); if (hit) return hit; }
     for (const ex of political || !gopt.settlers ? [] : this.snap.expeditions || []) {
       const p = this.expPos(ex, now);
       if (Math.hypot(vx - p.x, vy - p.y) <= 11 + slack) return { type: 'expedition', id: ex.id, x: p.x, y: p.y, r: 10, item: ex };

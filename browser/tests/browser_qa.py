@@ -19,8 +19,12 @@ with sync_playwright() as p:
     page.fill('#seed-input', '42'); page.once('dialog', lambda d: d.accept()); page.click('#seed-form button')
     page.wait_for_function("document.querySelector('#seed-input').value==='42'", timeout=120000); idle()
     assert page.locator('.news .lead-story').is_visible(), 'breaking news panel'
+    assert page.locator('#dock').is_hidden(), 'the console stays hidden until ~ is pressed'
+    assert page.locator('[data-tab="workshop"]').count() == 0 and page.locator('.inf-btn').count() == 4, 'influence bar replaces the workshop'
 
     def command(text):
+        if page.locator('#dock').is_hidden():
+            page.evaluate('document.activeElement.blur()'); page.keyboard.press('`')
         page.fill('#command', text)
         page.press('#command', 'Enter')
         page.wait_for_function("document.querySelector('#dock-cmd').textContent.includes(%s)" % json.dumps(text.split()[0]))
@@ -43,7 +47,7 @@ with sync_playwright() as p:
         page.click(f'[data-map-view="{view}"]')
         page.wait_for_timeout(300)
     assert 'Settler parties' in command('expeditions')
-    for section in ['map', 'countries', 'settlements', 'people', 'development', 'systems', 'demographics', 'discoveries', 'health', 'wars', 'events', 'workshop', 'overview']:
+    for section in ['map', 'countries', 'settlements', 'people', 'development', 'systems', 'demographics', 'discoveries', 'health', 'wars', 'events', 'overview']:
         page.click(f'#navigation [data-tab="{section}"]')
         assert page.locator('#content').inner_text().strip()
         assert page.locator('#error').is_hidden()
@@ -127,6 +131,32 @@ with sync_playwright() as p:
     assert page.evaluate("window.__map.spriteBoxes.length") > 0, 'political map still draws settlements'
     assert page.evaluate("[...document.querySelectorAll('input[data-geo]')].map(i => i.dataset.geo).join()") == 'buildings,contested,names'
     page.click('[data-map-view="geo"]'); page.wait_for_timeout(300)
+    # influences are aimed by clicking the map; moving parties open their own panel; pings jump to big events
+    page.evaluate("() => window.__map.resetView()"); page.wait_for_timeout(200)
+    page.locator('#map-slot').scroll_into_view_if_needed()
+    at = lambda x, y: page.evaluate(f"(() => {{ const m = window.__map, r = m.host.getBoundingClientRect(); return [r.left + ({x} * m.zoom + m.panX) / 1000 * r.width, r.top + ({y} * m.zoom + m.panY) / 600 * r.height]; }})()")
+    if page.locator('#dock').is_visible():
+        page.evaluate('document.activeElement.blur()'); page.keyboard.press('`')
+    # a big town clear of the ping tray (top left) and inside the visible window
+    town = page.evaluate("(() => { const m = window.__map, r = m.host.getBoundingClientRect(), px = s => [r.left + (s.px * m.zoom + m.panX) / 1000 * r.width, r.top + (s.py * m.zoom + m.panY) / 600 * r.height]; const s = m.geoSites.filter(s => s.population >= 40).filter(s => { const [x, y] = px(s); return (x > r.left + 320 || y > r.top + 300) && y < innerHeight - 140 && y > 60; }).sort((a, b) => b.population - a.population)[0]; return {x: s.px, y: s.py}; })()")
+    page.evaluate("['settlers', 'armies', 'merchants'].forEach(k => window.__map.setGeoOption(k, false))")
+    page.click('[data-influence="idea"]'); page.mouse.click(*at(town['x'], town['y'])); idle(); page.wait_for_timeout(200)
+    assert 'An idea about' in page.locator('.toast').last.inner_text() or 'not ready' in page.locator('.toast').last.inner_text(), page.locator('.toast').last.inner_text()
+    assert not page.locator('#detail-dialog').is_visible(), 'aiming does not open dialogs'
+    page.click('[data-influence="expedition"]'); page.mouse.click(*at(town['x'], town['y'])); page.wait_for_timeout(150)
+    page.click('[data-inf-skip]'); idle(); page.wait_for_timeout(200)
+    assert 'settlers set out' in page.locator('.toast').last.inner_text(), page.locator('.toast').last.inner_text()
+    page.evaluate("['settlers', 'armies', 'merchants'].forEach(k => window.__map.setGeoOption(k, true))")
+    party = page.evaluate("(() => { const m = window.__map, e = m.snap.expeditions.at(-1), q = m.expPos(e, performance.now()); return {x: q.x, y: q.y}; })()")
+    page.mouse.click(*at(party['x'], party['y'])); page.wait_for_timeout(300)
+    assert page.locator('#detail-dialog').is_visible() and 'SETTLERS' in page.inner_text('#detail-dialog .eyebrow'), 'clicking a moving party opens it'
+    page.click('#detail-dialog .close')
+    assert 'Undid' in command('undo')
+    page.keyboard.press('Escape')
+    assert page.evaluate("window.__pings.items.length") > 0, 'forty years should leave some big events pinned'
+    page.locator('.ping-chip').first.click(); page.wait_for_timeout(400)
+    assert page.inner_text('#page-title') == 'World map' and page.evaluate("window.__map.zoom") > 2, 'a ping jumps to the event'
+    page.evaluate("() => window.__map.resetView()"); page.wait_for_timeout(200)
     # a tile opens its deposit dialog
     page.evaluate("() => { const m = window.__map; m.focus(500, 300, 4); }")
     page.wait_for_timeout(300)
@@ -137,5 +167,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'hidden console, influences, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()

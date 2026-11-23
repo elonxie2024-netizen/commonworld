@@ -41,24 +41,19 @@
   <main id="content" aria-live="polite"><div class="loading"><span class="spinner"></span><h2>Loading simulation…</h2></div></main>
 </div>
 
-<section class="dock" aria-label="Console">
+<section id="dock" class="dock" aria-label="Console" hidden>
   <div id="dock-out" class="dock-out" hidden>
     <div class="dock-out-head"><span id="dock-cmd"></span><button id="dock-close" aria-label="Close output">✕</button></div>
     <pre id="console-output" tabindex="0"></pre>
   </div>
   <form id="command-form" autocomplete="off">
     <span class="prompt">›</span>
-    <span class="cmd-wrap"><input id="command" placeholder='Type a command, e.g. person "Az Ee of Azar", country Azar, help edit   ( / to focus )' aria-label="Console command" spellcheck="false"><span id="console-pick" class="pick-list up" hidden></span></span>
+    <span class="cmd-wrap"><input id="command" placeholder="Console: type help, or help edit. Press ~ to close." aria-label="Console command" spellcheck="false"><span id="console-pick" class="pick-list up" hidden></span></span>
     <button class="primary" type="submit">Run ↵</button>
   </form>
-  <div class="dock-chips">
-    <button data-prefill='person '>person…</button><button data-prefill='settlement '>settlement…</button><button data-prefill='country '>country…</button>
-    <i></i>
-    <button data-command="help">help</button><button data-command="help edit">help edit</button><button data-command="help ids">help ids</button>
-    <i></i>
-    <button data-command="people">people</button><button data-command="settlements">settlements</button><button data-command="countries">countries</button><button data-command="demographics">demographics</button><button data-command="wars">wars</button><button data-command="borders">borders</button><button data-command="projects">projects</button><button data-command="expeditions">expeditions</button><button data-command="systems">systems</button><button data-command="diseases">diseases</button><button data-command="richest">richest</button><button data-command="lineages">lineages</button><button data-command="changes">changes</button><button data-command="undo">undo</button>
-  </div>
 </section>
+
+<nav id="influences" class="influence-bar" aria-label="Influence the world"></nav>
 
 <dialog id="detail-dialog"><button class="close" aria-label="Close">×</button><div id="detail-content"></div></dialog>
 <dialog id="report-dialog" class="wide"><button class="close" aria-label="Close">×</button><div class="report-head"><span class="eyebrow">REPORT</span><h2 id="report-title"></h2></div><pre id="report-text"></pre><div class="report-foot"><button data-copy>Copy text</button></div></dialog>

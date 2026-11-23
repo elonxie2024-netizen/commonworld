@@ -6,8 +6,14 @@ A civilization simulator that runs in your browser.
 
 Or double-click
 `Start Civilization.cmd` (Windows), or run `node browser/serve.mjs` and open
-http://127.0.0.1:8765. Advance the world one year at a time, or type a command
-in the console at the bottom of the page. Inspection commands do not advance time,
+http://127.0.0.1:8765. Advance the world one year at a time and click anything on
+the map (towns, tiles, armies, settlers, merchants) to inspect it. The bar at the
+bottom nudges the world: spark an expedition, seed an idea, shift diplomacy or
+stir the land, each aimed by clicking the map. Big events leave pings you can
+click to jump to them.
+
+The text console described below is still there for power users: press `~`
+(or the backtick key) to open it. Inspection commands do not advance time,
 consume random numbers, or change the simulation. Editing commands change the
 world immediately without advancing time.
 
@@ -90,11 +96,14 @@ delete disease "Glass fever"
 grant Arden irrigation
 grant Arden "crop rotation"
 revoke Arden irrigation
+inspire Arden
+inspire Arden "crop rotation"
 war Arden Newland
 peace Arden Newland years=5
 trigger Arden Famine
 trigger Arden Abundance
 disaster Arden flood severity=major
+disaster Arden earthquake severity=minor x=40 y=30
 set simulation war_chance .25
 undo
 ```

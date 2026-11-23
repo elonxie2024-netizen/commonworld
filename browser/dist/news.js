@@ -65,22 +65,24 @@ const RULES = [
 ];
 const QUIET = /began a research project|Failed trials|An experiment in|Teachers from|public initiative|Population (increased|decreased)|starts lineage|was appointed|asked |requested |proposed |organized a trial|established public|tried a public|backed a plan|Storytellers|died aged|restricted|moved from|Volunteers|attempted to/;
 
+// One event as a headline with a score (100 = front page), or null for routine noise.
+export function classify(e) {
+  for (const [pattern, build] of RULES) {
+    const m = e.message.match(pattern);
+    if (m) return build(m);
+  }
+  if (QUIET.test(e.message) || ['political', 'creative', 'lineage', 'population'].includes(e.category)) return null;
+  const kind = e.category === 'war' ? 'war' : e.category === 'disaster' ? 'disaster' : e.category === 'sickness' ? 'health' : 'news';
+  return h(kind, 30, e.message.length > 90 ? e.message.slice(0, 87) + '…' : e.message);
+}
+
 export function headlines(snap, limit = 7) {
   const found = [];
   const events = snap.events || [];
   for (let i = events.length - 1; i >= 0 && found.length < 160; i--) {
     const e = events[i];
-    let item = null;
-    for (const [pattern, build] of RULES) {
-      const m = e.message.match(pattern);
-      if (m) { item = build(m); break; }
-    }
-    if (!item) {
-      if (QUIET.test(e.message) || ['political', 'creative', 'lineage', 'population'].includes(e.category)) continue;
-      const kind = e.category === 'war' ? 'war' : e.category === 'disaster' ? 'disaster' : e.category === 'sickness' ? 'health' : 'news';
-      item = h(kind, 30, e.message.length > 90 ? e.message.slice(0, 87) + '…' : e.message);
-    }
-    if (item.score < 30) continue;
+    const item = classify(e);
+    if (!item || item.score < 30) continue;
     found.push({ ...item, year: e.year, message: e.message, order: i });
   }
   // Newest year first, then the biggest story; avoid repeating the same story type endlessly.
