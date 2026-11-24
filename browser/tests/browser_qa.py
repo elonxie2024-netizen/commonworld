@@ -20,7 +20,7 @@ with sync_playwright() as p:
     page.wait_for_function("document.querySelector('#seed-input').value==='42'", timeout=120000); idle()
     assert page.locator('.news .lead-story').is_visible(), 'breaking news panel'
     assert page.locator('#dock').is_hidden(), 'the console stays hidden until ~ is pressed'
-    assert page.locator('[data-tab="workshop"]').count() == 0 and page.locator('.inf-btn').count() == 4, 'influence bar replaces the workshop'
+    assert page.locator('[data-tab="workshop"]').count() == 0 and page.locator('[data-influence]').count() == 4, 'influence bar replaces the workshop'
 
     def command(text):
         if page.locator('#dock').is_hidden():
@@ -157,6 +157,16 @@ with sync_playwright() as p:
     page.locator('.ping-chip').first.click(); page.wait_for_timeout(400)
     assert page.inner_text('#page-title') == 'World map' and page.evaluate("window.__map.zoom") > 2, 'a ping jumps to the event'
     page.evaluate("() => window.__map.resetView()"); page.wait_for_timeout(200)
+    # right-click opens an edit panel; the inspector's Edit button does too, and Back returns to it
+    page.mouse.click(*at(town['x'], town['y']), button='right'); page.wait_for_timeout(300)
+    assert page.inner_text('#detail-dialog .eyebrow').startswith('EDIT'), 'right-clicking a town edits it'
+    form = page.locator('#detail-dialog form[data-edit-action]').first
+    form.locator('input').fill('Qatown'); form.locator('button[type=submit]').click(); idle(); page.wait_for_timeout(150)
+    assert 'Qatown' in page.inner_text('#detail-dialog h2'), 'the panel renames and stays open'
+    page.click('[data-edit-back]'); assert not page.inner_text('#detail-dialog .eyebrow').startswith('EDIT')
+    page.click('#detail-dialog .edit-open'); assert page.inner_text('#detail-dialog .eyebrow').startswith('EDIT')
+    page.click('#detail-dialog .close'); assert 'Undid' in command('undo'); page.keyboard.press('Escape')
+    page.click('[data-edit="world:world"]'); assert 'World rules' in page.inner_text('#detail-dialog h2'); page.click('#detail-dialog .close')
     # a tile opens its deposit dialog
     page.evaluate("() => { const m = window.__map; m.focus(500, 300, 4); }")
     page.wait_for_timeout(300)
@@ -167,5 +177,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'hidden console, influences, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()

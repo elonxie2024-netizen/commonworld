@@ -31,9 +31,9 @@ export const INFLUENCES = [
     command: (p, q, o) => (o.mood === 'pact' ? `trade pact ${q(p[0].name)} ${q(p[1].name)}` : `${o.mood} ${q(p[0].name)} ${q(p[1].name)}`)
   },
   {
-    id: 'disaster', icon: 'bolt', label: 'Stir the land', color: '#f97316', steps: ['tile'],
+    id: 'disaster', icon: 'bolt', label: 'Unleash a disaster', color: '#f97316', steps: ['tile'],
     options: { kind: KINDS, severity: SEVERITIES }, labels: { likeliest: 'Likeliest here' },
-    prompt: ['Click where the land should stir'],
+    prompt: ['Click where the disaster should strike'],
     command: (p, q, o) => `disaster ${q(p[0].country.name)} ${o.kind === 'likeliest' ? likeliest(p[0]) : o.kind} severity=${o.severity} x=${p[0].cell[0]} y=${p[0].cell[1]}`
   }
 ];
@@ -50,8 +50,9 @@ export function likeliest(r) {
 
 export class InfluenceBar {
   // run(command) -> Promise<boolean>; resolve(hit) -> { settlement, country, cell, water, terrain, river, coast, name } or null
-  constructor(el, { run, resolve, quote, esc, icon, toast, onArm }) {
-    Object.assign(this, { el, run, resolve, quote, esc, icon, toast, onArm });
+  // extra: HTML appended to the end of the bar (the app adds its World rules button there).
+  constructor(el, { run, resolve, quote, esc, icon, toast, onArm, extra = '' }) {
+    Object.assign(this, { el, run, resolve, quote, esc, icon, toast, onArm, extra });
     this.active = null; this.picks = []; this.opts = { mood: 'pact', kind: 'likeliest', severity: 'minor' };
     el.addEventListener('click', e => this.click(e));
     this.render();
@@ -108,7 +109,7 @@ export class InfluenceBar {
       const skip = inf.skip && this.picks.length === inf.steps.length - 1 ? `<button class="inf-skip" data-inf-skip>${esc(inf.skip)}</button>` : '';
       strip = `<div class="inf-strip" style="--c:${inf.color}"><span class="inf-step">${inf.steps.length > 1 ? `<b>${this.picks.length + 1}/${inf.steps.length}</b>` : ''}${esc(text)}</span>${options}${skip}<button class="inf-cancel" data-inf-cancel>Cancel <kbd>Esc</kbd></button></div>`;
     }
-    this.el.innerHTML = `${strip}<div class="inf-buttons" role="toolbar" aria-label="Influence the world">${buttons}</div>`;
+    this.el.innerHTML = `${strip}<div class="inf-buttons" role="toolbar" aria-label="Influence the world">${buttons}${this.extra}</div>`;
   }
 }
 

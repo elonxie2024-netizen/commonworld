@@ -682,3 +682,24 @@ button.hrow:hover{background:#f5f6fd}
   .ping-chip{max-width:190px}
   .ping-tray .ping-chip:nth-child(n+3){display:none}
 }
+
+/* ---------- edit panels (ui/editor.js) ---------- */
+.edit-open{position:absolute;top:16px;right:64px;z-index:5;height:38px;border-radius:99px;padding:0 14px;display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;background:rgba(255,255,255,.85);border:1px solid var(--line);color:#3f3fb8}
+.edit-open svg{width:16px;height:16px}
+.edit-open:hover{background:#eef0fd}
+.actions.top{margin:4px 0 0}
+.ed-rows{display:grid;gap:8px}
+.ed-row{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2.2fr) auto;gap:8px 14px;align-items:center;padding:7px 10px 7px 12px;border-radius:14px;background:#f8f9fe}
+.ed-fields>.ed-field:only-child>span{display:none}
+.ed-row.danger{background:#fff7f8}
+.ed-label b{display:block;font-size:13.5px}
+.ed-label small{display:block;color:var(--muted);font-size:11.5px;margin-top:1px}
+.ed-fields{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;min-width:0}
+.ed-field{display:grid;gap:3px;flex:1 1 120px;min-width:0;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.ed-field input,.ed-field select{padding:7px 10px;font-size:13px}
+.ed-field.check{display:flex;flex:0 0 auto;align-items:center;gap:6px;padding-bottom:7px}
+.ed-row>button{white-space:nowrap;padding:8px 16px}
+.ed-foot{margin-top:22px;font-size:12px}
+.inf-sep{width:1px;align-self:stretch;margin:4px 2px;background:#e3e5f5;flex:none}
+.inf-btn.quiet{color:#6b6b8c}
+@media(max-width:760px){.ed-row{grid-template-columns:1fr}.ed-row>button{justify-self:end}.edit-open span{display:none}}

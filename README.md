@@ -9,8 +9,10 @@ Or double-click
 http://127.0.0.1:8765. Advance the world one year at a time and click anything on
 the map (towns, tiles, armies, settlers, merchants) to inspect it. The bar at the
 bottom nudges the world: spark an expedition, seed an idea, shift diplomacy or
-stir the land, each aimed by clicking the map. Big events leave pings you can
-click to jump to them.
+unleash a disaster, each aimed by clicking the map. Right-click anything (or
+press Edit in its panel) to change it directly, and use World rules at the end
+of the bar for the world's own settings. Big events leave pings you can click
+to jump to them.
 
 The text console described below is still there for power users: press `~`
 (or the backtick key) to open it. Inspection commands do not advance time,

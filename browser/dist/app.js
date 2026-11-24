@@ -6,6 +6,7 @@ import { Console } from './ui/console.js';
 import { InfluenceBar } from './ui/influences.js';
 import { Pings } from './ui/pings.js';
 import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
+import { Editor } from './ui/editor.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -555,15 +556,21 @@ function countryExtras(c) {
 }
 
 const dlg = () => $('#detail-dialog');
-function showDialog(type, id) { dialog = { type, id: String(id) }; renderDialog(); if (!dlg().open) dlg().showModal(); }
-function lookup(type, id) { if (UNIT_TYPES.includes(type)) return findUnit(snap, type, id); if (type === 'cell') { const [x, y] = String(id).split(',').map(Number); return snap?.geo && y >= 0 && y < snap.geo.h ? { id: String(id), x, y } : null; } return type === 'person' ? idx.people.get(id) : type === 'settlement' ? idx.settlements.get(id) : type === 'country' ? idx.countries.get(id) : snap.diseases.find(d => d.name === id); }
+// mode 'view' inspects; mode 'edit' shows everything that can be changed about it (ui/editor.js).
+function showDialog(type, id, mode = 'view') { dialog = { type, id: String(id), mode }; renderDialog(); if (!dlg().open) { dlg().showModal(); $('#detail-content').scrollTop = 0; } }
+function openEditor(target) { if (!target || !snap) return; if (influences.armed) influences.cancel(); showDialog(target.type, target.id, 'edit'); }
+// What the Edit button of an inspector opens: the thing itself, or for a moving party the country it belongs to.
+function editTarget(type, item) { return UNIT_TYPES.includes(type) ? { type: 'country', id: String(item.country) } : { type, id: String(item.id ?? dialog.id) }; }
+function lookup(type, id) { if (type === 'world') return { id: 'world' }; if (UNIT_TYPES.includes(type)) return findUnit(snap, type, id); if (type === 'cell') { const [x, y] = String(id).split(',').map(Number); return snap?.geo && y >= 0 && y < snap.geo.h ? { id: String(id), x, y } : null; } return type === 'person' ? idx.people.get(id) : type === 'settlement' ? idx.settlements.get(id) : type === 'country' ? idx.countries.get(id) : snap.diseases.find(d => d.name === id); }
 function renderDialog() {
   if (!dialog) return;
   const item = lookup(dialog.type, dialog.id);
   if (!item) { dlg().close(); return; }
-  const box = $('#detail-content'), top = box.scrollTop, same = box.dataset.key === `${dialog.type}:${dialog.id}`;
-  box.innerHTML = (DIALOGS[dialog.type] || UNITS[dialog.type])(item);
-  box.dataset.key = `${dialog.type}:${dialog.id}`; box.scrollTop = same ? top : 0;
+  const box = $('#detail-content'), top = box.scrollTop, same = box.dataset.key === `${dialog.mode}:${dialog.type}:${dialog.id}`;
+  if (dialog.mode === 'edit') box.innerHTML = editor.render(dialog.type, item) + editor.lists();
+  else { const e = editTarget(dialog.type, item); box.innerHTML = `<button class="edit-open" data-edit="${e.type}:${esc(e.id)}" title="Edit (or right-click it anywhere)">${icon('hammer')}<span>Edit</span></button>` + (DIALOGS[dialog.type] || UNITS[dialog.type])(item); }
+  const key = `${dialog.mode}:${dialog.type}:${dialog.id}`;
+  box.dataset.key = key; box.scrollTop = same ? top : 0;
 }
 function refreshDialog() { if (dialog && dlg().open) renderDialog(); }
 function openReport(title, text) {
@@ -790,9 +797,22 @@ function nearestTown([x, y]) {
 }
 const influences = new InfluenceBar($('#influences'), {
   run: text => runCmd(text), resolve: resolveHit, quote, esc, icon, toast,
+  extra: `<span class="inf-sep"></span><button class="inf-btn quiet" data-edit="world:world" style="--c:#5b5bf0" title="World rules: war, breakaway and disaster chances, new diseases">${icon('network')}<span>World rules</span></button>`,
   onArm: on => { mapHost.classList.toggle('aiming', on); if (on && section !== 'overview' && section !== 'map') { $$('dialog[open]').forEach(d => d.close()); switchSection('map'); } }
 });
 window.__influences = influences;
+const editor = new Editor({ esc, quote, num, icon, tag, cc, jobs: JOBS, snap: () => snap, idx: () => idx, places: () => livePlaces(), resolve: hit => resolveHit(hit) });
+window.__editor = editor;
+// Right-click anything to edit it: on the map, or any person, town, country or disease in a list.
+mapHost.addEventListener('contextmenu', e => { if (e.target.closest('.map-zoom, .ping-slot')) return; e.preventDefault(); openEditor(Editor.target(map.find(e))); });
+document.addEventListener('contextmenu', e => {
+  const el = e.target.closest?.('[data-person],[data-settlement],[data-country],[data-disease]'); if (!el || mapHost.contains(el)) return;
+  e.preventDefault(); for (const type of ['person', 'settlement', 'country', 'disease']) if (el.dataset[type] != null) { openEditor({ type, id: el.dataset[type] }); return; }
+});
+document.addEventListener('submit', e => {
+  const form = e.target.closest('form[data-edit-action]'); if (!form) return;
+  e.preventDefault(); const c = editor.command(form.dataset.editAction, form); if (c) runCmd(c.cmd, { confirm: c.confirm });
+});
 // Influence shortcuts inside dialogs: an idea runs at once; the others start aiming with the first choice made.
 function influenceGo(kind, id) {
   $$('dialog[open]').forEach(d => d.close());
@@ -807,6 +827,8 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-tab]'))) { $$('dialog[open]').forEach(d => d.close()); switchSection(el.dataset.tab); return; }
   if ((el = t.closest('[data-run]'))) { runCmd(el.dataset.run, { confirm: el.dataset.confirm }); return; }
   if ((el = t.closest('[data-report]'))) { runCmd(el.dataset.report, { to: 'report' }); return; }
+  if ((el = t.closest('[data-edit]'))) { const [type, ...id] = el.dataset.edit.split(':'); openEditor({ type, id: id.join(':') }); return; }
+  if ((el = t.closest('[data-edit-back]'))) { if (dialog) showDialog(dialog.type, dialog.id); return; }
   if ((el = t.closest('[data-ping]'))) { const p = pings.find(el.dataset.ping); if (p) jumpPing(p); return; }
   if ((el = t.closest('[data-influence-go]'))) { const [kind, id] = el.dataset.influenceGo.split(':'); influenceGo(kind, id); return; }
   if ((el = t.closest('[data-map-view]'))) { mapView = el.dataset.mapView; map.setView(mapView); render(true); return; }
