@@ -171,7 +171,14 @@ with sync_playwright() as p:
     page.click('[data-edit-back]'); assert not page.inner_text('#detail-dialog .eyebrow').startswith('EDIT')
     page.click('#detail-dialog .edit-open'); assert page.inner_text('#detail-dialog .eyebrow').startswith('EDIT')
     page.click('#detail-dialog .close'); assert 'Undid' in command('undo'); page.keyboard.press('Escape')
-    page.click('[data-edit="world:world"]'); assert 'World rules' in page.inner_text('#detail-dialog h2'); page.click('#detail-dialog .close')
+    page.click('[data-edit="world:world"]'); assert 'World rules' in page.inner_text('#detail-dialog h2')
+    row = page.locator('#detail-dialog form[data-edit-action]', has_text='People shape the world')
+    row.locator('select').select_option('on'); row.locator('button[type=submit]').click(); idle(); page.wait_for_timeout(150)
+    assert 'shape the world' in page.locator('.toast').last.inner_text() and page.evaluate("window.__map.snap.lifeFlow") is True, 'the switch turns on'
+    page.locator('#detail-dialog form[data-edit-action]', has_text='People shape the world').locator('select').select_option('off')
+    page.locator('#detail-dialog form[data-edit-action]', has_text='People shape the world').locator('button[type=submit]').click(); idle()
+    assert page.evaluate("window.__map.snap.lifeFlow") is False
+    page.click('#detail-dialog .close')
     # a tile opens its deposit dialog
     page.evaluate("() => { const m = window.__map; m.focus(500, 300, 4); }")
     page.wait_for_timeout(300)
@@ -182,5 +189,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()

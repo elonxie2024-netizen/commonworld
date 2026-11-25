@@ -74,3 +74,96 @@ test('tags are capped and the least notable is forgotten first', () => {
   life.add(2, 1, 'fought', 7, 1); life.add(2, 2, 'fought', 7, 2); life.add(2, 5, 'fought', 7, 5);
   assert.deepEqual(life.tags.get(2).map(t => t.slice(1)), [['fought', 7, 2], ['fought', 7, 5]]);
 });
+
+// ---- seasons: what people do, and where it lands
+import {unit} from '../../dist/sim/life_seasons.js';
+
+function consistent(sim) {
+  let bad = [];
+  for (const p of sim.people.values()) {
+    const s = sim.settlements.get(p.settlement);
+    if (!s || s.country !== p.country || s.abandoned != null) bad.push(`home of ${p.id}`);
+    if (!(p.wealth >= 0) || !(p.fame >= 0 && p.fame <= 100)) bad.push(`numbers of ${p.id}`);
+  }
+  for (const [cid, c] of sim.countries) for (const [title, id] of c.offices) {
+    const h = sim.people.get(id);
+    if (!h || h.country !== cid || h.public_role !== title) bad.push(`${title} of ${cid}`);
+  }
+  return bad;
+}
+
+test('season decisions are repeatable numbers in [0, 1)', () => {
+  assert.equal(unit(1, 2, 3, 4, 5), unit(1, 2, 3, 4, 5));
+  assert.notEqual(unit(1, 2, 3, 4, 5), unit(1, 2, 3, 4, 6));
+  let lo = 1, hi = 0; for (let i = 0; i < 2000; i++) { const u = unit(7, i); lo = Math.min(lo, u); hi = Math.max(hi, u); }
+  assert.ok(lo >= 0 && hi < 1 && lo < 0.05 && hi > 0.95);
+});
+
+test('with the switch off, people act in an overlay and the world is untouched', () => {
+  assert.equal(e.life.flow, false);
+  assert.ok(e.life.track.size > 100, 'many people have private changes');
+  const [id, t] = [...e.life.track].find(([id, t]) => e.sim.people.has(id) && t.dw);
+  const p = e.sim.people.get(id), v = e.life.view(e.sim, p);
+  assert.notEqual(v.wealth, p.wealth, 'the overlay differs from the simulation');
+  assert.equal(e.lifeStory(id).now.overlay, true);
+  assert.equal(consistent(e.sim).length, 0);
+});
+
+test('with the switch on, people change the real world and it stays consistent', () => {
+  const a = new Engine(); a.create({population: 1500, seed: 42});
+  assert.match(a.command('life flow on').output, /shape the world/);
+  assert.equal(a.snapshot().lifeFlow, true);
+  a.step(40);
+  assert.equal(a.life.track.size, 0, 'nothing is held back in the overlay');
+  assert.deepEqual(consistent(a.sim), []);
+  assert.notEqual(a.sim.people.size, e.sim.people.size, 'the world played out differently');
+  const jobs = new Set(); for (const p of a.sim.people.values()) jobs.add(p.job);
+  assert.ok(jobs.has('scientist') && jobs.has('merchant'));
+  const b = new Engine(); b.create({population: 1500, seed: 42}); b.command('life flow on'); b.step(40);
+  assert.equal(b.exportSave(), a.exportSave(), 'the same seed gives the same world');
+});
+
+test('switching on carries the overlay into the world once', () => {
+  const x = new Engine(); x.create({population: 800, seed: 3}); x.step(10);
+  const before = [...x.sim.people.values()].reduce((s, p) => s + p.wealth, 0), held = [...x.life.track.values()].reduce((s, t) => s + (t.dw ?? 0), 0);
+  assert.ok(x.life.track.size > 0);
+  x.command('life flow on');
+  const after = [...x.sim.people.values()].reduce((s, p) => s + p.wealth, 0);
+  assert.equal(x.life.track.size, 0);
+  assert.ok(Math.abs(after - before - held) < before * 0.05 + 50, 'the overlay money arrived (some belonged to people who have since died)');
+  assert.match(x.command('life flow on').output, /already/);
+  x.command('life flow off'); x.step(2);
+  assert.ok(x.life.track.size > 0, 'off again: new changes go back to the overlay');
+});
+
+test('promotion into an existing office is announced and keeps the offices consistent', () => {
+  const a = new Engine(); a.create({population: 1500, seed: 11}); a.command('life flow on'); a.step(30);
+  const appointed = a.sim.history.filter(([, m]) => /was appointed/.test(m)).length;
+  assert.ok(appointed > 0);
+  const promoted = [...a.life.tags].filter(([, l]) => l.some(t => t[1] === 'promoted'));
+  assert.ok(promoted.length > 0);
+  assert.deepEqual(consistent(a.sim), []);
+});
+
+test('standing rises with fame, fortune and office; ranks are named', () => {
+  const ranks = new Set(), scores = [];
+  for (const p of e.sim.people.values()) { const s = e.life.standing(e.sim, p); ranks.add(s.rank); scores.push(s.score); }
+  assert.ok(scores.every(s => s >= 0 && s <= 100));
+  assert.ok(ranks.has('Commoner') && ranks.size >= 3);
+  const ruler = [...e.sim.countries.values()].map(c => e.sim.people.get(c.ruler)).find(Boolean);
+  assert.ok(e.life.standing(e.sim, ruler).score >= 25);
+});
+
+test('save and load keep the switch and the overlay', () => {
+  const copy = new Engine(); copy.importSave(e.exportSave());
+  assert.equal(copy.life.flow, false);
+  assert.equal(JSON.stringify([...copy.life.track]), JSON.stringify([...e.life.track]));
+  const on = new Engine(); on.create({population: 300, seed: 2}); on.command('life flow on');
+  const back = new Engine(); back.importSave(on.exportSave());
+  assert.equal(back.life.flow, true);
+});
+
+test('the life command reports and rejects politely', () => {
+  assert.match(e.command('life status').output, /People shape the world: off/);
+  assert.match(e.command('life nonsense').output, /^Use: life flow/);
+});

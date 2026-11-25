@@ -227,6 +227,9 @@ export class Editor {
     const rule = (key, label, hint) => ({ label, hint, fields: [number('value', '0 to 1', round(s[key], 3), { min: 0, max: 1 })], run: v => `set simulation ${key} ${v.value}` });
     return { kind: 'WORLD', title: 'World rules', color: '#5b5bf0', groups: [
       { title: 'Yearly chances', rows: [rule('war_chance', 'War', 'How readily rivals go to war'), rule('country_chance', 'New countries', 'How readily towns break away'), rule('lineage_chance', 'New family lines'), rule('disaster_chance', 'Natural disasters')] },
+      { title: 'People', rows: [
+        { label: 'People shape the world', hint: 'Off: what people do each season (trade, study, moving, promotion) stays in their own story. On: it changes the real world.', fields: [choose('value', 'State', [['off', 'Off (their own story)'], ['on', 'On (changes the world)']], snap().lifeFlow ? 'on' : 'off')], run: v => `life flow ${v.value}` }
+      ] },
       { title: 'New disease', rows: [
         { label: 'Create a disease', hint: 'It spreads only once it breaks out somewhere', fields: [text('name', 'Name', '', { required: true }), choose('course', 'Course', COURSES), choose('transmission', 'Spreads by', TRANSMISSIONS), number('infection', 'Infection', 0.35, { min: 0, max: 1 }), number('death', 'Death', 0.02, { min: 0, max: 1 }), number('recovery', 'Recovery', 0.85, { min: 0, max: 1 })],
           run: v => `add disease ${q(v.name)} course=${v.course} transmission=${v.transmission}${opt('infection', v)}${opt('death', v)}${opt('recovery', v)}`, button: 'Create' }

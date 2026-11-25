@@ -9,6 +9,7 @@ import {INNOVATIONS} from './discoveries.js';
 import {TECHNOLOGIES, EVENT_CATALOG} from './society.js';
 import {command} from './civic.js';
 import {Life} from './life.js';
+import {runSeasons} from './life_seasons.js';
 import {observers} from './warfare.js';
 import {Simulation, Person, Settlement, Sickness, Lineage, Country, NameGenerator} from './civsim.js';
 import {serialize, deserialize, Counter, TupleMap} from './runtime.js';
@@ -84,8 +85,21 @@ export class Engine {
     return this.snapshot();
   }
 
+  /** `life flow on|off` and `life status`: the layer's own switches, outside the simulation's command language. */
+  lifeCommand(rest) {
+    const life = this.life ??= new Life(), [what, value] = rest.split(/\s+/);
+    if (what === 'flow' && ['on', 'off'].includes(value)) {
+      const changed = life.setFlow(this.sim, value === 'on');
+      return [value === 'on' ? (changed ? 'People now shape the world: what they do each season is applied to the simulation itself.' : 'People already shape the world.') : (changed ? 'People no longer change the world; what they do each season stays in their own story.' : 'People already stay in their own story.'), 'edit'];
+    }
+    if (what === 'status' || !what) return [`People shape the world: ${life.flow ? 'on' : 'off'}. ${life.tags.size} people have milestones; ${life.track.size} have private changes.`, 'info'];
+    return ['Use: life flow on | life flow off | life status', 'error'];
+  }
+
   command(text) {
     eventCache.clear();
+    const lifeCall = /^\s*life(?:\s+(.*))?$/i.exec(String(text));
+    if (lifeCall) { const [output, action] = this.lifeCommand((lifeCall[1] ?? '').trim().toLowerCase()); return {output, action, snapshot: this.snapshot()}; }
     const [output, action] = command(this.sim, String(text));
     if (action === 'next') this.step();
     return {output, action, snapshot: this.snapshot()};
@@ -115,6 +129,7 @@ export class Engine {
     const life = this.life ??= new Life(), before = life.capture(this.sim);
     observers.levy = (sim, country, army) => life.onLevy(sim, country, army);
     try { this.sim.tick(false); } finally { observers.levy = null; }
+    runSeasons(this.sim, life); // four seasons of what people do, then the diff notes what happened to whom
     life.observe(this.sim, before);
   }
 
@@ -283,7 +298,7 @@ export class Engine {
       events: this.events(sim, lineages),
       reports,
       catalog: {foundations: TECHNOLOGIES.size, innovations: INNOVATIONS.size, events: EVENT_CATALOG.length},
-      canUndo: !!sim._command_undo,
+      canUndo: !!sim._command_undo, lifeFlow: !!this.life?.flow,
     };
   }
 

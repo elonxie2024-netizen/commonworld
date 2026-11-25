@@ -579,7 +579,9 @@ function renderDialog() {
 let storyCache = new Map();
 function storyHtml(s) {
   if (!s) return '<p class="muted">No record.</p>';
-  return `<p class="life-summary">${esc(s.summary)}</p><ol class="life-lines">${s.lines.map(l => `<li><b>Year ${l.year}</b><span>${esc(l.text)}</span></li>`).join('')}</ol>`;
+  const st = s.standing, n = s.now;
+  const now = n ? `<p class="life-now">Now ${esc(n.job)}${n.role ? `, ${esc(n.role)}` : ''} in ${esc(n.settlement)}, ${esc(n.country)} · wealth ${num(n.wealth)} · fame ${Math.round(n.fame)}${n.overlay ? ' <em>(in their own story: the world has not caught up)</em>' : ''}</p>` : '';
+  return `<p class="life-summary">${tag(`${st.rank} · ${st.score}`, '#8b5cf6')} ${esc(s.summary)}</p>${now}<ol class="life-lines">${s.lines.map(l => `<li><b>Year ${l.year}</b><span>${esc(l.text)}</span></li>`).join('')}</ol>`;
 }
 async function fillStory() {
   const el = $('#detail-content .life-story'); if (!el || !snap) return;
