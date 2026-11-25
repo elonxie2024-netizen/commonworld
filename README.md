@@ -214,7 +214,7 @@ From the `browser` folder (Node.js, or `tools\node.exe`):
 npm test
 ```
 
-That runs the 144 unit tests in `tests/unit/` (inspection, editing, undo,
+That runs the 156 unit tests in `tests/unit/` (inspection, editing, undo,
 economy, epidemics, war, technology, world generation and more), then four
 regression checks against frozen reference data recorded from the Python
 original: `parity.mjs` (94 scenarios, full state and random numbers), `parity_long.mjs`

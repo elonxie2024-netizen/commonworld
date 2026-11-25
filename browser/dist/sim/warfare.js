@@ -5,6 +5,9 @@ import {technology_modifiers, boosted_of, end_pact} from './society.js';
 import {LETHALITY, UNIT_NAMES} from './technology.js';
 import {distance_to_country, contacts, defense} from './geography.js';
 import {state, war_friction} from './systems.js';
+
+/** Read-only listeners (set by the engine's life layer); they never touch simulation state or random numbers. */
+export const observers = {levy: null};
 import {damage_buildings, besieging} from './development.js';
 
 /** Casualty multiplier from the gap in weapons: spearmen against muskets die faster, and the reverse. */
@@ -162,6 +165,7 @@ export function resolve_wars(sim) {
       // Leave most working adults at home and never mobilize over 8% of residents.
       const levy = Math.min(Math.trunc(adults.length * .22), Math.trunc(side.length * .08), Math.trunc(side.length * .10 * Math.min(1, country.food / 60) * innovation.get('logistics')));
       armies.push(sim.rng.sample(adults, levy));
+      observers.levy?.(sim, country, armies.at(-1));
       const supply_bonus = 0;
       const supply = Math.max(.25, Math.min(1.2, country.food / 65 * innovation.get('logistics') + supply_bonus + st.get('supply_bonus')));
       supplies.push(supply);

@@ -8,6 +8,8 @@ import * as systems from './systems.js';
 import {INNOVATIONS} from './discoveries.js';
 import {TECHNOLOGIES, EVENT_CATALOG} from './society.js';
 import {command} from './civic.js';
+import {Life} from './life.js';
+import {observers} from './warfare.js';
 import {Simulation, Person, Settlement, Sickness, Lineage, Country, NameGenerator} from './civsim.js';
 import {serialize, deserialize, Counter, TupleMap} from './runtime.js';
 
@@ -72,12 +74,13 @@ export class Engine {
     if (!Number.isSafeInteger(population) || population < 1 || population > 20000) throw Error('Choose a population between 1 and 20,000.');
     if (!Number.isSafeInteger(seed)) throw Error('Use a whole-number seed.');
     this.sim = new Simulation(population, seed);
+    this.life = new Life();
     return this.snapshot();
   }
 
   step(count = 1) {
     if (!Number.isInteger(count) || count < 1 || count > 100) throw Error('Advance between 1 and 100 years at a time.');
-    for (let i = 0; i < count; i++) this.sim.tick(false);
+    for (let i = 0; i < count; i++) this.tickYear();
     return this.snapshot();
   }
 
@@ -107,7 +110,22 @@ export class Engine {
     return out;
   }
 
-  exportSave() { return serialize(this.sim); }
+  /** One year of the simulation, with the life layer watching (it only reads). */
+  tickYear() {
+    const life = this.life ??= new Life(), before = life.capture(this.sim);
+    observers.levy = (sim, country, army) => life.onLevy(sim, country, army);
+    try { this.sim.tick(false); } finally { observers.levy = null; }
+    life.observe(this.sim, before);
+  }
+
+  /** A person's story, stitched together now from their milestone tags and the archive. */
+  lifeStory(id) { return (this.life ??= new Life()).story(this.sim, Number(id)); }
+
+  // The life layer rides along as one extra field at the end of the save text.
+  exportSave() {
+    const text = serialize(this.sim);
+    return `${text.slice(0, -1)},"life":${JSON.stringify((this.life ??= new Life()).toJSON())}}`;
+  }
 
   importSave(text) {
     eventCache.clear();
@@ -116,6 +134,10 @@ export class Engine {
       throw Error('The save does not contain a simulation.');
     }
     this.sim = candidate;
+    let life = new Life();
+    const at = text.lastIndexOf(',"life":');
+    if (at > 0) { try { life = Life.fromJSON(JSON.parse(text.slice(at + 8, -1))); } catch { /* an older save: start with no tags */ } }
+    this.life = life;
     return this.snapshot();
   }
 

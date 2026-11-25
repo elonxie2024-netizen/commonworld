@@ -703,3 +703,9 @@ button.hrow:hover{background:#f5f6fd}
 .inf-sep{width:1px;align-self:stretch;margin:4px 2px;background:#e3e5f5;flex:none}
 .inf-btn.quiet{color:#6b6b8c}
 @media(max-width:760px){.ed-row{grid-template-columns:1fr}.ed-row>button{justify-self:end}.edit-open span{display:none}}
+
+/* ---------- life stories ---------- */
+.life-summary{font-weight:600;margin:0 0 10px}
+.life-lines{list-style:none;margin:0;padding:0;display:grid;gap:2px;max-height:300px;overflow:auto;border-left:2px solid #e3e5f5;padding-left:14px}
+.life-lines li{display:grid;grid-template-columns:62px 1fr;gap:10px;font-size:13px;padding:3px 0}
+.life-lines b{color:var(--muted);font-weight:700;font-size:11.5px;padding-top:2px}

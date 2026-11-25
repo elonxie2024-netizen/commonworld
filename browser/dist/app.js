@@ -96,6 +96,7 @@ const govBlurb = k => snap?.governments?.[k]?.blurb || '';
 // ---------- data helpers ----------
 const push = (map, key, value) => { const k = String(key); if (!map.has(k)) map.set(k, []); map.get(k).push(value); };
 function setSnap(s) {
+  storyCache = new Map();
   snap = s;
   idx = { people: new Map(), settlements: new Map(), countries: new Map(), cIndex: new Map(), living: [], kids: new Map(), residents: new Map() };
   s.countries.forEach((c, i) => { idx.countries.set(String(c.id), c); idx.cIndex.set(String(c.id), i); });
@@ -456,6 +457,7 @@ const DIALOGS = {
     <div class="dlg-body"><div class="statgrid">${stat('Age', p.age)}${stat('Born', 'year ' + p.born)}${stat('Occupation', esc(p.job || 'resident'))}${stat('Wealth', num(p.wealth, 1))}${stat('Fame', num(p.fame, 1))}${stat('Lineage', esc(p.lineageName))}</div>
     <div class="linkrow"><span>Country</span>${country ? chipLink('country', country) : '—'}<span>Home</span>${place ? chipLink('settlement', place) : '—'}</div>
     ${parents.length || kids.length ? `<h3 class="sub">Family</h3><div class="linkrow">${parents.length ? '<span>Parents</span>' : ''}${parents.map(x => chipLink('person', x)).join('')}${kids.length ? '<span>Children</span>' : ''}${kids.slice(0, 12).map(x => chipLink('person', x)).join('')}${kids.length > 12 ? `<small class="muted">+${kids.length - 12} more</small>` : ''}</div>` : ''}
+    <h3 class="sub">Life story <small class="muted">stitched together from their milestones</small></h3><div class="life-story" data-life="${p.id}"><p class="muted">Gathering their story…</p></div>
     <div class="actions"><button class="soft" data-report="${esc('person ' + n)}">${icon('list')} Full life report</button></div>
     </div>`;
   },
@@ -571,6 +573,19 @@ function renderDialog() {
   else { const e = editTarget(dialog.type, item); box.innerHTML = `<button class="edit-open" data-edit="${e.type}:${esc(e.id)}" title="Edit (or right-click it anywhere)">${icon('hammer')}<span>Edit</span></button>` + (DIALOGS[dialog.type] || UNITS[dialog.type])(item); }
   const key = `${dialog.mode}:${dialog.type}:${dialog.id}`;
   box.dataset.key = key; box.scrollTop = same ? top : 0;
+  if (dialog.mode !== 'edit' && dialog.type === 'person') fillStory();
+}
+// A person's story is stitched together in the worker only when their panel is open, then kept until the world changes.
+let storyCache = new Map();
+function storyHtml(s) {
+  if (!s) return '<p class="muted">No record.</p>';
+  return `<p class="life-summary">${esc(s.summary)}</p><ol class="life-lines">${s.lines.map(l => `<li><b>Year ${l.year}</b><span>${esc(l.text)}</span></li>`).join('')}</ol>`;
+}
+async function fillStory() {
+  const el = $('#detail-content .life-story'); if (!el || !snap) return;
+  const id = el.dataset.life, key = `${snap.year}|${id}`, paint = s => { if (el.isConnected && el.dataset.life === id) el.innerHTML = storyHtml(s); };
+  if (storyCache.has(key)) { paint(storyCache.get(key)); return; }
+  try { const s = await sim.lifeStory(id); storyCache.set(key, s); paint(s); } catch { paint(null); }
 }
 function refreshDialog() { if (dialog && dlg().open) renderDialog(); }
 function openReport(title, text) {

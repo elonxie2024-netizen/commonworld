@@ -21,6 +21,11 @@ with sync_playwright() as p:
     assert page.locator('.news .lead-story').is_visible(), 'breaking news panel'
     assert page.locator('#dock').is_hidden(), 'the console stays hidden until ~ is pressed'
     assert page.locator('[data-tab="workshop"]').count() == 0 and page.locator('[data-influence]').count() == 4, 'influence bar replaces the workshop'
+    # a person's story is stitched together on demand when their panel opens
+    page.click('[data-tab="people"]'); page.locator('[data-person]').first.click()
+    page.wait_for_selector('#detail-dialog .life-lines li', timeout=15000)
+    assert "Born" in page.inner_text("#detail-dialog .life-lines li"), "life story begins with the birth"
+    page.click('#detail-dialog .close'); page.click('[data-tab="overview"]')
 
     def command(text):
         if page.locator('#dock').is_hidden():
@@ -177,5 +182,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()

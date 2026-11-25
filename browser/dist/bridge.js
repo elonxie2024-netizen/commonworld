@@ -8,4 +8,5 @@ export class BrowserSimulation {
  hazardMap(){return this.request('hazardMap');}
  exportSave(){return this.request('exportSave');}
  importSave(text){return this.request('importSave',text);}
+ lifeStory(id){return this.request('lifeStory',id);}
 }
