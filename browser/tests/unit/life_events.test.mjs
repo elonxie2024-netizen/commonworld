@@ -47,7 +47,7 @@ const pending = (s, kind, season = 0) => {
   const ev = detect(s.sim, s.g.life, me(s), season, kind);
   assert.ok(ev, `a ${kind} pop-up`);
   s.g.life.player.choice = ev;
-  return ev;
+  return s.g.playerView().choice; // as the screen sees it: availability checked against the switch as it is now
 };
 
 test('every kind of pop-up is built, and each unavailable choice says why', () => {
@@ -140,7 +140,7 @@ test('a waiting pop-up pauses everything until you answer it', () => {
   assert.ok(again.view.choice, 'the season did not pass');
   assert.equal(s.g.life.player.season, season); assert.equal(s.sim.year, year);
   s.g.step(1); assert.equal(s.sim.year, year, 'Step does not run past it');
-  s.g.choose(s.g.life.player.choice.options.find(o => o.enabled).id);
+  s.g.choose(s.g.playerView().choice.options.find(o => o.enabled).id);
   assert.equal(s.g.life.player.choice, null);
 });
 
@@ -149,7 +149,7 @@ test('a real run reaches pop-ups on its own, and each kind waits out its cooldow
   for (let i = 0; i < 40 && seen.length < 12; i++) {
     s.g.playSeason('work');
     const ch = s.g.life.player.choice;
-    if (ch) { seen.push([ch.kind, ch.year]); s.g.choose(ch.options.find(o => o.enabled).id); }
+    if (ch) { seen.push([ch.kind, ch.year]); s.g.choose(s.g.playerView().choice.options.find(o => o.enabled).id); }
   }
   assert.ok(seen.length >= 1, 'something happened');
   for (const kind of KINDS) {

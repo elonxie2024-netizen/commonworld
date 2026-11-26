@@ -10,7 +10,8 @@ import {TECHNOLOGIES, EVENT_CATALOG} from './society.js';
 import {command} from './civic.js';
 import {Life} from './life.js';
 import {runSeasons, runSeason} from './life_seasons.js';
-import {newPlayer, perform, playerView, describeChange} from './life_player.js';
+import {newPlayer, perform, playerView, oneOffs} from './life_player.js';
+import {newStats, context, focusSpecs, runFocus} from './life_careers.js';
 import {detect, resolveChoice} from './life_events.js';
 import {succeed} from './life_succession.js';
 import {observers} from './warfare.js';
@@ -151,6 +152,29 @@ export class Engine {
     life.player = newPlayer(this.sim, p.id); life.touch(this.sim);
     return {view: playerView(this.sim, life), snapshot: null};
   }
+  /** What the person does every season from now on, until you change it. Takes no time. */
+  setFocus(id) {
+    const life = this.life, pl = life?.player, sim = this.sim, p = pl && sim.people.get(pl.id);
+    if (!p) throw Error('Nobody is being played.');
+    const f = focusSpecs(context(sim, life, p, pl.season >= 4 ? 0 : pl.season)).find(x => x.id === String(id));
+    if (!f || !f.enabled) throw Error(f?.why || 'That is not open to them right now.');
+    pl.focus = f.id;
+    return {view: playerView(sim, life), snapshot: null};
+  }
+
+  /** Line up a one-off move (travel, a new trade, an office) for the start of the next season; null clears it. */
+  queueAct(act, arg = null) {
+    const life = this.life, pl = life?.player, sim = this.sim, p = pl && sim.people.get(pl.id);
+    if (!p) throw Error('Nobody is being played.');
+    if (act == null) pl.queue = null;
+    else {
+      const o = oneOffs(sim, life, p).find(x => x.id === act && (x.arg == null || x.arg === arg) && x.enabled && (!x.options || x.options.some(op => op.value === String(arg))));
+      if (!o) throw Error('That is not possible for them right now.');
+      pl.queue = {act, arg: arg == null ? null : String(arg)};
+    }
+    return {view: playerView(sim, life), snapshot: null};
+  }
+
   /** The person you played has died: carry on as one of their heirs (or 'random' when no family is left). */
   succeed(pick) {
     const life = this.life; succeed(this.sim, life, pick === 'random' ? pick : Number(pick));
@@ -197,9 +221,12 @@ export class Engine {
       const ev = detect(sim, life, p, season);
       if (ev) { pl.choice = ev; pl.eventKey = key; pl.last = {...(pl.last ?? {}), [ev.kind]: sim.year}; return {ticked, paused: true}; }
     }
+    const auto = act === 'auto'; // the usual way: a queued one-off move, else your standing focus
+    if (auto) { if (pl.queue) { ({act, arg} = pl.queue); pl.queue = null; } else act = pl.focus || 'work'; }
+    runSeason(sim, life, season, pl.id);
     let text;
-    if (act === 'auto') { runSeason(sim, life, season); text = describeChange(sim, before, life.view(sim, p)); }
-    else { runSeason(sim, life, season, pl.id); text = perform(sim, life, p, season, act, arg); }
+    if (auto && !['move', 'retrain', 'office'].includes(act)) text = runFocus(context(sim, life, p, season), act);
+    else { try { text = perform(sim, life, p, season, act, arg); } catch (e) { if (!auto) throw e; text = runFocus(context(sim, life, p, season), pl.focus || 'work'); } } // a queued move that is no longer possible gives way to your focus
     pl.log.unshift({year: sim.year, season, text}); if (pl.log.length > 40) pl.log.length = 40;
     pl.season++; life.touch(sim);
     return {ticked, paused: false};
@@ -227,6 +254,8 @@ export class Engine {
     const at = text.lastIndexOf(',"life":');
     if (at > 0) { try { life = Life.fromJSON(JSON.parse(text.slice(at + 8, -1))); } catch { /* an older save: start with no tags */ } }
     this.life = life;
+    const pl = life.player; // an older save has no stats or focus yet
+    if (pl && !pl.stats) { pl.stats = newStats(this.sim.people.get(pl.id) ?? this.sim.archive.get(pl.id) ?? {age: 20}); pl.focus ??= 'work'; pl.queue ??= null; }
     return this.snapshot();
   }
 

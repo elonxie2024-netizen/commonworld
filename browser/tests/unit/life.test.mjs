@@ -180,7 +180,7 @@ test('the life command reports and rejects politely', () => {
 
 // ---- person mode
 // Pop-ups pause play, so these helpers answer whatever is waiting (the first option you could pick) and then play the season.
-const clear = g => { while (g.life.player?.choice) g.choose(g.life.player.choice.options.find(o => o.enabled).id); };
+const clear = g => { while (g.life.player?.choice) g.choose(g.playerView().choice.options.find(o => o.enabled).id); };
 const season = (g, act, arg) => { let r; do { clear(g); r = g.playSeason(act, arg); } while (g.life.player.choice); return r; };
 function playable(flow) {
   const g = new Engine(); g.create({population: 1500, seed: 42});
@@ -194,7 +194,7 @@ test('playing a person: a year ticks only when spring begins, and seasons come o
   const {g, id} = playable(false), y = g.sim.year;
   const first = g.playAs(id).view;
   assert.equal(first.next.season, 0); assert.equal(first.next.year, y + 1);
-  assert.ok(first.actions.some(a => a.id === 'work') && first.actions.some(a => a.id === 'auto'));
+  assert.ok(first.focuses.some(a => a.id === 'work') && first.focus === 'work');
   const r1 = season(g, 'study');
   assert.equal(g.sim.year, y + 1, 'spring started a new year');
   assert.ok(r1.snapshot, 'a new year sends a fresh snapshot');
@@ -217,7 +217,7 @@ test('the Step button plays the person for you, one year per step', () => {
 
 test('choices: travel, retrain and offices are validated', () => {
   const {g, id} = playable(false);
-  const v = g.playAs(id).view, mv = v.actions.find(a => a.id === 'move');
+  const v = g.playAs(id).view, mv = v.oneoffs.find(a => a.id === 'move');
   const r = season(g, 'move', mv.options[0].value);
   assert.notEqual(r.view.home.id, v.home.id);
   assert.throws(() => season(g, 'move', '999999'), /not possible/);
@@ -241,7 +241,7 @@ test('with the switch off the choices stay in the overlay; on, they change the w
 
 test('moving abroad makes you a citizen there when the world follows', () => {
   const {g, id} = playable(true);
-  const v = g.playAs(id).view, abroad = v.actions.find(a => a.id === 'move').options.map(o => g.sim.settlements.get(Number(o.value))).find(s => s.country !== v.country.id);
+  const v = g.playAs(id).view, abroad = v.oneoffs.find(a => a.id === 'move').options.map(o => g.sim.settlements.get(Number(o.value))).find(s => s.country !== v.country.id);
   if (!abroad) return;
   season(g, 'move', String(abroad.id));
   assert.equal(g.sim.people.get(id).country, abroad.country);

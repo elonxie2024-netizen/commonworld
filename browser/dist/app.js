@@ -30,6 +30,7 @@ const EV_ICONS = { war: 'swords', sickness: 'pulse', disease: 'pulse', discovery
 const PAGE = 48;
 
 let sim, snap, idx, section = 'overview', busy = false, playing = false, running = false, stopFlag = false, dialog = null;
+let resume = null; // what a decision interrupted: 'play', or the number of years still to run. Answering it carries on.
 let mapMode = 'country', showPeople = true;
 const view = { search: '', country: '', job: '', status: 'living', infected: false, sort: 'fame', page: 0, eventCat: '', techOnly: '' };
 
@@ -629,7 +630,7 @@ function render(force = false) {
 function renderChoice() {
   const ch = snap?.player?.choice, box = $('#choice-dialog');
   if (!ch) { if (box.open) box.close(); box.dataset.key = ''; return; }
-  const key = `${ch.year}:${ch.season}:${ch.kind}`;
+  const key = `${ch.year}:${ch.season}:${ch.kind}:${ch.flow}`;
   if (box.dataset.key !== key) { box.innerHTML = choiceHtml(ch, { esc, icon }); box.dataset.key = key; }
   if (!box.open) box.showModal();
 }
@@ -749,14 +750,14 @@ async function runYears(n) {
   await work(async () => {
     for (let i = 0; i < n && !stopFlag; i++) {
       const s = await sim.step(1); map.tileMs = n > 1 ? 0 : tileMs(); setSnap(s); render();
-      if (s.player?.choice) { stopFlag = true; playing = false; updatePlay(); toast('A decision is waiting for you.', 'warn'); break; } // time pauses at every pop-up
+      if (s.player?.choice) { resume = playing ? 'play' : n > 1 ? n - i : null; stopFlag = true; playing = false; updatePlay(); toast('A decision is waiting for you.', 'warn'); break; } // time pauses at every pop-up, then carries on once it is answered
       if (n > 1) setProgress(i + 1, n); else { yearMs = Math.max(map.animMs, 8 * tileMs()); runSeasons(yearMs); }
     }
   });
   running = false; setProgress(); updatePlay();
 }
 async function togglePlay() {
-  if (playing || running) { playing = false; stopFlag = true; updatePlay(); return; }
+  if (playing || running) { playing = false; stopFlag = true; resume = null; updatePlay(); return; }
   playing = true; updatePlay();
   while (playing) { await runYears(1); if (!playing) break; await sleep(yearMs + Number($('#speed').value) / 2); }
   playing = false; updatePlay();
@@ -872,11 +873,25 @@ async function playSeasonUI(act, arg) {
 }
 // Answer the pop-up. The answer may change the world (an illness, a wound, a settler party), so a fresh snapshot comes back.
 async function chooseUI(option) {
-  await work(async () => {
+  const ok = await work(async () => {
     const r = await sim.choose(option);
     setSnap(r.snapshot); render(true);
     if (r.view?.log?.[0]) toast(r.view.log[0].text);
   });
+  const again = resume; resume = null;
+  if (ok && again && snap?.player?.alive && !snap.player.choice) { if (again === 'play') togglePlay(); else runYears(again); } // the decision made, time carries on by itself
+  else if (!ok) resume = again;
+}
+// A focus is what the person does every season; changing it takes no time and does not stop the clock.
+async function setFocusUI(id) {
+  try { const r = await sim.setFocus(id); snap.player = r.view; render(true); toast('Focus: ' + (r.view.focuses.find(f => f.id === id)?.label ?? id)); } catch (e) { showError(e); }
+}
+// A one-off move waits for the next season. If time is stopped, live that season now so the click has an effect.
+async function queueUI(act, arg) {
+  try {
+    const r = await sim.queueAct(act, arg); snap.player = r.view; render(true);
+    if (act && !(playing || running)) playSeasonUI('auto'); else if (act) toast('Queued for next season.');
+  } catch (e) { showError(e); }
 }
 // The person you played has died: carry on as an heir. Money, fame and perhaps an office come with them.
 async function succeedUI(pick) {
@@ -897,7 +912,10 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-choice]'))) { chooseUI(el.dataset.choice); return; }
   if ((el = t.closest('[data-play-heir]'))) { succeedUI(el.dataset.playHeir); return; }
   if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
-  if ((el = t.closest('[data-play-act]'))) { const act = el.dataset.playAct, sel = $(`#play-arg-${act}`); playSeasonUI(act, el.dataset.playArg ?? (sel ? sel.value : null)); return; }
+  if ((el = t.closest('[data-focus]'))) { setFocusUI(el.dataset.focus); return; }
+  if ((el = t.closest('[data-queue]'))) { const act = el.dataset.queue, sel = $(`#queue-arg-${act}`); queueUI(act, el.dataset.queueArg ?? (sel ? sel.value : null)); return; }
+  if (t.closest('[data-queue-clear]')) { queueUI(null); return; }
+  if (t.closest('[data-play-next]')) { playSeasonUI('auto'); return; }
   if (t.closest('[data-play-stop]')) { stopPlaying(); return; }
   if (t.closest('[data-play-random]')) { succeedUI('random'); return; }
   if ((el = t.closest('[data-edit]'))) { const [type, ...id] = el.dataset.edit.split(':'); openEditor({ type, id: id.join(':') }); return; }

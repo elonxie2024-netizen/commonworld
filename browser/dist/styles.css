@@ -758,3 +758,26 @@ dialog.choice::backdrop{background:rgba(20,18,58,.62);backdrop-filter:blur(3px)}
 .choice-opt:hover:not(:disabled){border-color:var(--c);box-shadow:0 6px 18px color-mix(in srgb,var(--c) 22%,transparent);transform:translateY(-1px)}
 .choice-opt:disabled{opacity:.55;cursor:not-allowed;background:#f6f7fc}
 .choice-foot{margin:14px 0 0;font-size:12px;text-align:center}
+.pm-season .primary{margin-left:auto}
+.pm-cols{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px;align-items:start}
+.pm-main,.pm-side{display:grid;gap:16px;min-width:0}
+.pm-group h3{margin:0 0 8px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.pm-group+.pm-group{margin-top:14px}
+.pm-focuses{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.pm-focus{display:grid;gap:3px;align-content:start;text-align:left;padding:11px 13px;border-radius:14px;background:#f8f9fe;border:2px solid transparent;cursor:pointer;font:inherit;color:inherit}
+.pm-focus b{font-size:14px}
+.pm-focus small{color:var(--muted);font-size:12px;line-height:1.35}
+.pm-focus:hover:not(:disabled){border-color:#c9ccf5}
+.pm-focus.on{border-color:#5b5bf0;background:#eef0fd}
+.pm-focus:disabled{opacity:.55;cursor:not-allowed}
+.pm-queued{margin:0 0 10px;padding:8px 12px;border-radius:12px;background:#fff7d6;font-size:13px}
+.pm-stats{display:grid;gap:9px;margin-bottom:10px}
+.pm-stat{display:grid;grid-template-columns:92px minmax(0,1fr) 44px;gap:4px 10px;align-items:center;font-size:13px}
+.pm-stat>span{color:var(--muted)}
+.pm-stat>b{text-align:right}
+.pm-stat>small{grid-column:2/-1;margin-top:-4px;color:var(--muted);font-size:11.5px}
+.pm-track{height:8px;border-radius:99px;background:#e8eaf8;overflow:hidden;position:relative}
+.pm-track i{display:block;height:100%;background:#5b5bf0;border-radius:99px}
+.pm-stat .none{height:8px}
+.choice-switch{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:12px 0 0;padding:10px 14px;border-radius:14px;background:#fff7d6;font-size:13px}
+@media (max-width:900px){.pm-cols{grid-template-columns:1fr}.pm-season .primary{margin-left:0}}

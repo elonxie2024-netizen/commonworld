@@ -14,4 +14,6 @@ export class BrowserSimulation {
  playSeason(act,arg){return this.request('playSeason',act,arg);}
  choose(option){return this.request('choose',option);}
  succeed(pick){return this.request('succeed',pick);}
+ setFocus(id){return this.request('setFocus',id);}
+ queueAct(act,arg){return this.request('queueAct',act,arg);}
 }

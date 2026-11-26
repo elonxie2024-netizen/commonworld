@@ -27,19 +27,19 @@ with sync_playwright() as p:
     assert "Born" in page.inner_text("#detail-dialog .life-lines li"), "life story begins with the birth"
     # person mode: play as them, choose seasons by hand, Step plays them for you, stop
     page.click('[data-play-as]'); idle()
-    assert page.inner_text('#page-title') == 'My person' and page.locator('.pm-act').count() >= 4, 'person mode opens with choices'
+    assert page.inner_text('#page-title') == 'My person' and page.locator('.pm-focus').count() >= 4 and page.locator('.pm-stat').count() >= 7, 'person mode opens with focuses and stats'
     def answer():  # a life-choice pop-up must be answered before time moves on
         while page.locator('#choice-dialog[open]').count():
             page.locator('.choice-opt:not([disabled])').first.click(); idle(); page.wait_for_timeout(100)
     def play(act):  # a decision may interrupt the click; answer it, then live the season
-        page.click('[data-play-act="%s"]' % act); idle()
-        if page.locator('#choice-dialog[open]').count(): answer(); page.click('[data-play-act="%s"]' % act); idle()
+        page.click('[data-focus="%s"]' % act); idle(); page.click('[data-play-next]'); idle()
+        if page.locator('#choice-dialog[open]').count(): answer(); page.click('[data-play-next]'); idle()
     answer(); play('study'); play('work')
     assert page.locator('.pm .life-lines li').count() >= 2 and 'Autumn' in page.inner_text('.pm-clock'), 'seasons come one at a time'
     # a famine in their country reaches them as a pop-up that pauses time and cannot be dismissed
     land = page.evaluate("window.__map.snap.player.country.name")
     page.evaluate('document.activeElement.blur()'); page.keyboard.press('`'); page.fill('#command', 'trigger "%s" Famine' % land); page.press('#command', 'Enter'); idle(); page.keyboard.press('Escape')
-    page.click('[data-play-act="work"]'); idle(); page.wait_for_timeout(200)
+    page.click('[data-play-next]'); idle(); page.wait_for_timeout(200)
     assert page.locator('#choice-dialog[open]').count() == 1, 'the famine decision appears'
     assert 'Famine' in page.inner_text('#choice-dialog h2')
     year = page.inner_text('#year-num'); page.keyboard.press('Escape'); page.wait_for_timeout(150)
@@ -47,6 +47,19 @@ with sync_playwright() as p:
     assert page.evaluate("window.__map.snap.player.choice !== null")
     answer(); assert page.locator('#choice-dialog[open]').count() == 0 and page.inner_text('#year-num') == year, 'answering resumes without skipping time'
     page.click('#step'); idle(); answer(); assert page.locator('.pm-clock').is_visible()
+    # Play keeps running on its own focus; a decision stops it, and answering carries it on without pressing Play again
+    page.select_option('#speed', '200'); page.click('[data-focus="network"]'); idle(); page.click('#play')
+    try:
+        page.wait_for_selector('#choice-dialog[open]', timeout=90000)
+        y = page.inner_text('#year-num'); assert page.inner_text('#play').strip() == 'Play', 'Play stops at a decision'
+        page.locator('.choice-opt:not([disabled])').first.click(); idle()
+        page.wait_for_function("document.querySelector('#year-num').textContent !== '%s' || document.querySelector('#choice-dialog[open]')" % y, timeout=60000)
+        assert page.inner_text('#play').strip() == 'Stop' or page.locator('#choice-dialog[open]').count(), 'answering carries on without pressing Play'
+    except Exception as e:
+        if 'carries on' in str(e) or 'stops at' in str(e): raise
+    finally:
+        if page.inner_text('#play').strip() == 'Stop': page.click('#play')
+        idle(); answer(); page.select_option('#speed', '1400')
     # when the person dies they choose who carries on: family with what each inherits, or a random person if none is left
     pid = page.evaluate("window.__map.snap.player.id")
     page.evaluate('document.activeElement.blur()'); page.keyboard.press('`'); page.fill('#command', 'delete person %s' % pid); page.press('#command', 'Enter'); idle(); page.keyboard.press('Escape')
@@ -56,7 +69,7 @@ with sync_playwright() as p:
     assert heirs <= 8 and (heirs or page.locator('[data-play-random]').count() == 1), 'heirs, or the random fallback when none are left'
     if heirs: assert page.locator('.heir .heir-gets li').count() >= heirs and page.locator('.heir small').first.inner_text().startswith('Age'), 'each heir shows age, role, place and what they inherit'
     (page.locator('[data-play-heir]').first if heirs else page.locator('[data-play-random]')).click(); idle()
-    assert page.evaluate("window.__map.snap.player.alive && window.__map.snap.player.id !== %s" % pid) and page.locator('.pm-act').count() >= 4, 'play goes on as the next person'
+    assert page.evaluate("window.__map.snap.player.alive && window.__map.snap.player.id !== %s" % pid) and page.locator('.pm-focus').count() >= 2, 'play goes on as the next person'
     if heirs: assert 'Generation 2' in page.inner_text('.pm-head'), 'the line is counted'
     page.click('[data-play-stop]'); idle(); assert page.locator('[data-tab="person"]').count() == 0, 'stopping leaves person mode'
     page.click('[data-tab="overview"]')
