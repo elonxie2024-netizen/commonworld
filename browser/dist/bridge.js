@@ -12,4 +12,5 @@ export class BrowserSimulation {
  playAs(id){return this.request('playAs',id);}
  stopPlaying(){return this.request('stopPlaying');}
  playSeason(act,arg){return this.request('playSeason',act,arg);}
+ choose(option){return this.request('choose',option);}
 }

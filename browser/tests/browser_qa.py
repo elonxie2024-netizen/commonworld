@@ -28,9 +28,25 @@ with sync_playwright() as p:
     # person mode: play as them, choose seasons by hand, Step plays them for you, stop
     page.click('[data-play-as]'); idle()
     assert page.inner_text('#page-title') == 'My person' and page.locator('.pm-act').count() >= 4, 'person mode opens with choices'
-    page.click('[data-play-act="study"]'); idle(); page.click('[data-play-act="work"]'); idle()
+    def answer():  # a life-choice pop-up must be answered before time moves on
+        while page.locator('#choice-dialog[open]').count():
+            page.locator('.choice-opt:not([disabled])').first.click(); idle(); page.wait_for_timeout(100)
+    def play(act):  # a decision may interrupt the click; answer it, then live the season
+        page.click('[data-play-act="%s"]' % act); idle()
+        if page.locator('#choice-dialog[open]').count(): answer(); page.click('[data-play-act="%s"]' % act); idle()
+    answer(); play('study'); play('work')
     assert page.locator('.pm .life-lines li').count() >= 2 and 'Autumn' in page.inner_text('.pm-clock'), 'seasons come one at a time'
-    page.click('#step'); idle(); assert page.locator('.pm-clock').is_visible()
+    # a famine in their country reaches them as a pop-up that pauses time and cannot be dismissed
+    land = page.evaluate("window.__map.snap.player.country.name")
+    page.evaluate('document.activeElement.blur()'); page.keyboard.press('`'); page.fill('#command', 'trigger "%s" Famine' % land); page.press('#command', 'Enter'); idle(); page.keyboard.press('Escape')
+    page.click('[data-play-act="work"]'); idle(); page.wait_for_timeout(200)
+    assert page.locator('#choice-dialog[open]').count() == 1, 'the famine decision appears'
+    assert 'Famine' in page.inner_text('#choice-dialog h2')
+    year = page.inner_text('#year-num'); page.keyboard.press('Escape'); page.wait_for_timeout(150)
+    assert page.locator('#choice-dialog[open]').count() == 1, 'Esc cannot dismiss a decision'
+    assert page.evaluate("window.__map.snap.player.choice !== null")
+    answer(); assert page.locator('#choice-dialog[open]').count() == 0 and page.inner_text('#year-num') == year, 'answering resumes without skipping time'
+    page.click('#step'); idle(); answer(); assert page.locator('.pm-clock').is_visible()
     page.click('[data-play-stop]'); idle(); assert page.locator('[data-tab="person"]').count() == 0, 'stopping leaves person mode'
     page.click('[data-tab="overview"]')
     page.click('#new-world'); page.fill('#new-form [name=seed]', '42'); page.click('#new-form button[type=submit]')  # back to the year-0 world the later checks expect
@@ -198,5 +214,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, person mode, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, person mode, life-choice pop-ups, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()

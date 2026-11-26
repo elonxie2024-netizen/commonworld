@@ -11,6 +11,7 @@ import {command} from './civic.js';
 import {Life} from './life.js';
 import {runSeasons, runSeason} from './life_seasons.js';
 import {newPlayer, perform, playerView, describeChange} from './life_player.js';
+import {detect, resolveChoice} from './life_events.js';
 import {observers} from './warfare.js';
 import {Simulation, Person, Settlement, Sickness, Lineage, Country, NameGenerator} from './civsim.js';
 import {serialize, deserialize, Counter, TupleMap} from './runtime.js';
@@ -85,8 +86,9 @@ export class Engine {
     for (let i = 0; i < count; i++) {
       const pl = this.life?.player;
       if (pl && this.sim.people.has(pl.id)) { // somebody is being played: their seasons are taken one by one, left to the usual way
-        let ticked = false;
-        for (let guard = 0; !ticked && guard < 9 && this.sim.people.has(pl.id); guard++) ticked = this._playSeason('auto');
+        let ticked = false, paused = false;
+        for (let guard = 0; !ticked && !paused && guard < 9 && this.sim.people.has(pl.id); guard++) ({ticked, paused} = this._playSeason('auto'));
+        if (paused) break; // a decision is waiting: play stops until you make it
       } else this.tickYear();
     }
     return this.snapshot();
@@ -153,27 +155,48 @@ export class Engine {
 
   /** Play one season as the chosen person ('auto' lets it pass the usual way). The year ticks before spring. */
   playSeason(act = 'auto', arg = null) {
-    const ticked = this._playSeason(act, arg), life = this.life;
-    return {view: playerView(this.sim, life), snapshot: ticked || life.flow ? this.snapshot() : null};
+    const {ticked, paused} = this._playSeason(act, arg), life = this.life;
+    return {view: playerView(this.sim, life), snapshot: ticked || paused || life.flow ? this.snapshot() : null};
   }
-  /** Returns true when the year ticked. */
+
+  /** Answer the pop-up that is waiting. The world may have changed (an illness, a wound, a settler party), so a fresh snapshot comes back. */
+  choose(optionId) {
+    const life = this.life, pl = life?.player, sim = this.sim;
+    if (!pl?.choice) throw Error('There is nothing to decide right now.');
+    const p = sim.people.get(pl.id);
+    if (!p) throw Error('Your person has died.');
+    delete sim._command_undo;
+    const ch = pl.choice, r = resolveChoice(sim, life, p, ch, String(optionId));
+    pl.log.unshift({year: ch.year, season: ch.season, text: r.text}); if (pl.log.length > 40) pl.log.length = 40;
+    if (r.tag) life.add(p.id, ch.year, 'event', 'choice', r.tag);
+    pl.choice = null;
+    return {view: playerView(sim, life), snapshot: this.snapshot()};
+  }
+
+  /** {ticked, paused}: whether the year ticked, and whether a pop-up now waits (the season is then not yet lived). */
   _playSeason(act, arg) {
     const life = this.life, pl = life?.player, sim = this.sim;
     if (!pl) throw Error('Nobody is being played. Click a person and choose Play as.');
     if (!sim.people.has(pl.id)) throw Error('Your person has died. Choose someone else to play.');
+    if (pl.choice) return {ticked: false, paused: true};
     let ticked = false;
     if (pl.season >= 4) {
       this.tickYear({seasons: false}); pl.season = 0; ticked = true;
-      if (!sim.people.has(pl.id)) { const a = sim.archive.get(pl.id); pl.log.unshift({year: sim.year, season: 0, text: `You died at ${a.age}${a.cause_of_death ? ` of ${a.cause_of_death}` : ''}.`}); pl.season = 4; return true; }
+      if (!sim.people.has(pl.id)) { const a = sim.archive.get(pl.id); pl.log.unshift({year: sim.year, season: 0, text: `You died at ${a.age}${a.cause_of_death ? ` of ${a.cause_of_death}` : ''}.`}); pl.season = 4; pl.choice = null; return {ticked: true, paused: false}; }
     }
     delete sim._command_undo; // seasons change the world outside an edit
     const p = sim.people.get(pl.id), season = pl.season, before = life.view(sim, p);
+    const key = sim.year * 4 + season;
+    if (pl.eventKey !== key) { // something big may reach you before the season is lived
+      const ev = detect(sim, life, p, season);
+      if (ev) { pl.choice = ev; pl.eventKey = key; pl.last = {...(pl.last ?? {}), [ev.kind]: sim.year}; return {ticked, paused: true}; }
+    }
     let text;
     if (act === 'auto') { runSeason(sim, life, season); text = describeChange(sim, before, life.view(sim, p)); }
     else { runSeason(sim, life, season, pl.id); text = perform(sim, life, p, season, act, arg); }
     pl.log.unshift({year: sim.year, season, text}); if (pl.log.length > 40) pl.log.length = 40;
     pl.season++;
-    return ticked;
+    return {ticked, paused: false};
   }
 
   /** A person's story, stitched together now from their milestone tags and the archive. */
@@ -181,7 +204,9 @@ export class Engine {
 
   // The life layer rides along as one extra field at the end of the save text.
   exportSave() {
-    const text = serialize(this.sim);
+    // The pending-undo snapshot is plain scratch data that a save file cannot hold (and would be stale on loading anyway).
+    const undo = this.sim._command_undo; delete this.sim._command_undo;
+    let text; try { text = serialize(this.sim); } finally { if (undo) this.sim._command_undo = undo; }
     return `${text.slice(0, -1)},"life":${JSON.stringify((this.life ??= new Life()).toJSON())}}`;
   }
 

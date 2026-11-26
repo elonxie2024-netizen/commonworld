@@ -7,7 +7,7 @@ import { InfluenceBar } from './ui/influences.js';
 import { Pings } from './ui/pings.js';
 import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
 import { Editor } from './ui/editor.js';
-import { playerPanel, PlayerMarker } from './ui/player.js';
+import { playerPanel, PlayerMarker, choiceHtml } from './ui/player.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -623,7 +623,15 @@ function render(force = false) {
   if (RESULTS[section]) renderResults();
   if (section === 'overview' || section === 'map') { $('#map-slot').append(mapHost); map.redraw(); renderLegend(); }
   if (section === 'tech') { applyTechFilter(); const w = $('.techwrap'); if (w) { if (techScroll) { w.scrollLeft = techScroll.x; w.scrollTop = techScroll.y; } else w.scrollLeft = Number(w.dataset.scroll) || 0; } }
-  refreshDialog();
+  refreshDialog(); renderChoice();
+}
+// A life choice waiting for the person you play: a pop-up nobody can dismiss, shown over whatever page is open.
+function renderChoice() {
+  const ch = snap?.player?.choice, box = $('#choice-dialog');
+  if (!ch) { if (box.open) box.close(); box.dataset.key = ''; return; }
+  const key = `${ch.year}:${ch.season}:${ch.kind}`;
+  if (box.dataset.key !== key) { box.innerHTML = choiceHtml(ch, { esc, icon }); box.dataset.key = key; }
+  if (!box.open) box.showModal();
 }
 function renderLegend() { const el = $('#map-legend'); if (el) el.innerHTML = map.legend.map(l => `<span class="lg ${l.terrain ? 'terr' : ''}"><i style="background:${l.color}"></i>${esc(l.label)} <b>${num(l.count)}</b></span>`).join('') + (mapView === 'geo' && hazardKind ? `<span class="lg"><i style="background:${HAZARD_STYLE[hazardKind]}"></i>${cap(hazardKind)} risk (stronger = more likely)</span>` : ''); }
 function focusMap(where) {
@@ -741,6 +749,7 @@ async function runYears(n) {
   await work(async () => {
     for (let i = 0; i < n && !stopFlag; i++) {
       const s = await sim.step(1); map.tileMs = n > 1 ? 0 : tileMs(); setSnap(s); render();
+      if (s.player?.choice) { stopFlag = true; playing = false; updatePlay(); toast('A decision is waiting for you.', 'warn'); break; } // time pauses at every pop-up
       if (n > 1) setProgress(i + 1, n); else { yearMs = Math.max(map.animMs, 8 * tileMs()); runSeasons(yearMs); }
     }
   });
@@ -857,6 +866,15 @@ async function playSeasonUI(act, arg) {
     const r = await sim.playSeason(act, arg);
     if (r.snapshot) setSnap(r.snapshot); else { snap.player = r.view; playerMark.update(snap, map); map.redraw(); }
     render(true);
+    if (r.view?.choice) toast('A decision is waiting for you.', 'warn');
+    else if (r.view?.log?.[0]) toast(r.view.log[0].text);
+  });
+}
+// Answer the pop-up. The answer may change the world (an illness, a wound, a settler party), so a fresh snapshot comes back.
+async function chooseUI(option) {
+  await work(async () => {
+    const r = await sim.choose(option);
+    setSnap(r.snapshot); render(true);
     if (r.view?.log?.[0]) toast(r.view.log[0].text);
   });
 }
@@ -868,6 +886,7 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-tab]'))) { $$('dialog[open]').forEach(d => d.close()); switchSection(el.dataset.tab); return; }
   if ((el = t.closest('[data-run]'))) { runCmd(el.dataset.run, { confirm: el.dataset.confirm }); return; }
   if ((el = t.closest('[data-report]'))) { runCmd(el.dataset.report, { to: 'report' }); return; }
+  if ((el = t.closest('[data-choice]'))) { chooseUI(el.dataset.choice); return; }
   if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
   if ((el = t.closest('[data-play-act]'))) { const act = el.dataset.playAct, sel = $(`#play-arg-${act}`); playSeasonUI(act, el.dataset.playArg ?? (sel ? sel.value : null)); return; }
   if (t.closest('[data-play-stop]')) { stopPlaying(); return; }
@@ -891,7 +910,7 @@ document.addEventListener('click', e => {
   for (const type of ['person', 'settlement', 'country', 'disease']) if ((el = t.closest(`[data-${type}]`))) { showDialog(type, el.dataset[type]); return; }
   if ((el = t.closest('[data-copy]'))) { navigator.clipboard?.writeText($('#report-text').textContent); toast('Copied to clipboard.'); return; }
   if (t.closest('.close')) { t.closest('dialog').close(); return; }
-  if (t.tagName === 'DIALOG') t.close();
+  if (t.tagName === 'DIALOG' && t.id !== 'choice-dialog') t.close();
 });
 document.addEventListener('keydown', e => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[role=button][data-person],[role=button][data-settlement],[role=button][data-country],[role=button][data-disease]')) { e.preventDefault(); e.target.click(); return; }
@@ -899,6 +918,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && influences.armed && !$('dialog[open]')) { influences.cancel(); }
 });
 dlg().addEventListener('close', () => { dialog = null; });
+$('#choice-dialog').addEventListener('cancel', e => e.preventDefault()); // Esc cannot dodge a decision
 
 // ---------- top bar and sidebar ----------
 $('#step').onclick = () => { playing = false; runYears(1); };

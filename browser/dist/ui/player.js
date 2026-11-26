@@ -30,6 +30,17 @@ export function playerPanel(v, h) {
     </div></section>`;
 }
 
+const KIND_STYLE = { war: ['swords', '#dc2626'], plague: ['pulse', '#ec4899'], famine: ['coins', '#b45309'], settlers: ['compass', '#0d9488'], office: ['flag', '#8b5cf6'], rival: ['star', '#f59e0b'] };
+
+/** The pop-up for a life choice. Play stays paused until one option is picked. h: { esc, icon } */
+export function choiceHtml(ch, h) {
+  const { esc, icon } = h, [ic, col] = KIND_STYLE[ch.kind] || ['star', '#5b5bf0'];
+  return `<div class="choice-card" style="--c:${col}"><header class="choice-head"><span class="avatar xl sq" style="--c:${col}">${icon(ic)}</span><div><span class="eyebrow">A DECISION · ${['SPRING', 'SUMMER', 'AUTUMN', 'WINTER'][ch.season]} ${ch.year}</span><h2>${esc(ch.title)}</h2></div></header>
+    <p class="choice-text">${esc(ch.text)}</p>
+    <div class="choice-opts">${ch.options.map(o => `<button class="choice-opt" data-choice="${esc(o.id)}" ${o.enabled ? '' : 'disabled'}><b>${esc(o.label)}</b><small>${esc(o.enabled ? o.hint : o.why)}</small></button>`).join('')}</div>
+    <p class="muted choice-foot">Time is paused until you decide.</p></div>`;
+}
+
 const initials = name => name.split(/\s+/).filter(w => /^\p{L}/u.test(w) && w !== 'of').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const lifeLines = (lines, esc) => `<ol class="life-lines">${(lines || []).map(l => `<li><b>Year ${l.year}</b><span>${esc(l.text)}</span></li>`).join('')}</ol>`;
 

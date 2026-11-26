@@ -218,7 +218,7 @@ export class Life {
   static fromJSON(data) {
     const life = new Life();
     if (data && (data.v === 1 || data.v === 2) && Array.isArray(data.tags)) for (const [id, list] of data.tags) if (Array.isArray(list)) life.tags.set(Number(id), list.slice(-MAX_TAGS));
-    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : []}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
+    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : [], choice: data.player.choice ?? null, last: data.player.last ?? {}, eventKey: data.player.eventKey ?? null}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
     return life;
   }
 }

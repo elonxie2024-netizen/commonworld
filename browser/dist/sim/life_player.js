@@ -8,11 +8,11 @@ const LOG_LIMIT = 40;
 const money = n => Math.round(n).toLocaleString('en-US');
 
 /** The player's record, or null. { id, season (0-3 played this year; 4 = year over), log: [{year, season, text}], since } */
-export function newPlayer(sim, id) { return {id, season: 4, log: [], since: sim.year}; }
+export function newPlayer(sim, id) { return {id, season: 4, log: [], since: sim.year, choice: null, last: {}, eventKey: null}; }
 
 /** Towns a person could travel to, nearest first. */
-function towns(sim, life, p, limit = 14) {
-  const v = life.view(sim, p), here = sim.settlements.get(v.settlement), pop = new Map();
+export function towns(sim, life, p, limit = 14, view = null) {
+  const v = view ?? life.view(sim, p), here = sim.settlements.get(v.settlement), pop = new Map();
   for (const q of sim.people.values()) pop.set(q.settlement, (pop.get(q.settlement) ?? 0) + 1);
   return [...sim.settlements.values()]
     .filter(s => s.abandoned == null && s.gx != null && s.id !== v.settlement && (pop.get(s.id) ?? 0) > 0)
@@ -104,7 +104,7 @@ export function playerView(sim, life) {
   const arch = sim.archive.get(pl.id); if (!arch) return null;
   const alive = sim.people.has(pl.id), p = sim.people.get(pl.id) ?? arch;
   const next = pl.season >= 4 ? {year: sim.year + 1, season: 0} : {year: sim.year, season: pl.season};
-  const base = {id: pl.id, name: sim.full_name(arch), alive, flow: life.flow, year: sim.year, next: {...next, name: SEASON_NAMES[next.season]}, since: pl.since, log: pl.log.slice(0, 30)};
+  const base = {id: pl.id, name: sim.full_name(arch), alive, flow: life.flow, year: sim.year, next: {...next, name: SEASON_NAMES[next.season]}, since: pl.since, log: pl.log.slice(0, 30), choice: pl.choice ?? null};
   if (!alive) {
     const story = life.story(sim, pl.id);
     return {...base, age: arch.age, born: arch.born, died: arch.died, cause: arch.cause_of_death, summary: story?.summary ?? '', lines: (story?.lines ?? []).slice(-14), standing: story?.standing, kids: heirs(sim, pl.id)};

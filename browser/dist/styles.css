@@ -735,3 +735,18 @@ button.hrow:hover{background:#f5f6fd}
 .pm-act.off{opacity:.6}
 .pm-act.auto{background:#eef0fd}
 @media(max-width:1000px){.pm-grid{grid-template-columns:1fr}}
+
+/* ---------- life choices (pop-up) ---------- */
+dialog.choice{width:min(560px,calc(100vw - 28px));padding:0;border:0;border-radius:26px;overflow:hidden;box-shadow:0 30px 90px rgba(20,18,58,.5)}
+dialog.choice::backdrop{background:rgba(20,18,58,.62);backdrop-filter:blur(3px)}
+.choice-card{padding:24px 26px 20px;background:linear-gradient(180deg,color-mix(in srgb,var(--c) 14%,#fff),#fff 140px)}
+.choice-head{display:flex;gap:16px;align-items:center}
+.choice-head h2{font-size:21px;margin-top:3px;letter-spacing:-.3px}
+.choice-text{margin:14px 0 16px;line-height:1.55;color:#33365c}
+.choice-opts{display:grid;gap:8px}
+.choice-opt{display:grid;justify-items:start;align-content:center;gap:2px;text-align:left;padding:12px 15px;border-radius:15px;background:#fff;border:1px solid #dcdff2;cursor:pointer;transition:transform .08s,box-shadow .12s,border-color .12s}
+.choice-opt b{font-size:14.5px}
+.choice-opt small{color:var(--muted);font-size:12.3px}
+.choice-opt:hover:not(:disabled){border-color:var(--c);box-shadow:0 6px 18px color-mix(in srgb,var(--c) 22%,transparent);transform:translateY(-1px)}
+.choice-opt:disabled{opacity:.55;cursor:not-allowed;background:#f6f7fc}
+.choice-foot{margin:14px 0 0;font-size:12px;text-align:center}
