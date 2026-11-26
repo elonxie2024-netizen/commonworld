@@ -878,6 +878,14 @@ async function chooseUI(option) {
     if (r.view?.log?.[0]) toast(r.view.log[0].text);
   });
 }
+// The person you played has died: carry on as an heir. Money, fame and perhaps an office come with them.
+async function succeedUI(pick) {
+  await work(async () => {
+    const r = await sim.succeed(pick);
+    setSnap(r.snapshot); section = 'person'; render(true); window.scrollTo({ top: 0 });
+    if (r.view?.log?.[0]) toast(r.view.log[0].text);
+  });
+}
 async function stopPlaying() { await work(async () => { await sim.stopPlaying(); setSnap(await sim.getSnapshot()); if (section === 'person') section = 'overview'; render(true); toast('You stopped playing.'); }); }
 
 // ---------- global clicks ----------
@@ -887,10 +895,11 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-run]'))) { runCmd(el.dataset.run, { confirm: el.dataset.confirm }); return; }
   if ((el = t.closest('[data-report]'))) { runCmd(el.dataset.report, { to: 'report' }); return; }
   if ((el = t.closest('[data-choice]'))) { chooseUI(el.dataset.choice); return; }
+  if ((el = t.closest('[data-play-heir]'))) { succeedUI(el.dataset.playHeir); return; }
   if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
   if ((el = t.closest('[data-play-act]'))) { const act = el.dataset.playAct, sel = $(`#play-arg-${act}`); playSeasonUI(act, el.dataset.playArg ?? (sel ? sel.value : null)); return; }
   if (t.closest('[data-play-stop]')) { stopPlaying(); return; }
-  if (t.closest('[data-play-random]')) { const pool = idx.living.filter(p => p.age >= 18); if (pool.length) startPlaying(pool[Math.floor(Math.random() * pool.length)].id); return; }
+  if (t.closest('[data-play-random]')) { succeedUI('random'); return; }
   if ((el = t.closest('[data-edit]'))) { const [type, ...id] = el.dataset.edit.split(':'); openEditor({ type, id: id.join(':') }); return; }
   if ((el = t.closest('[data-edit-back]'))) { if (dialog) showDialog(dialog.type, dialog.id); return; }
   if ((el = t.closest('[data-ping]'))) { const p = pings.find(el.dataset.ping); if (p) jumpPing(p); return; }

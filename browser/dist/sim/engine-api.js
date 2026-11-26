@@ -12,6 +12,7 @@ import {Life} from './life.js';
 import {runSeasons, runSeason} from './life_seasons.js';
 import {newPlayer, perform, playerView, describeChange} from './life_player.js';
 import {detect, resolveChoice} from './life_events.js';
+import {succeed} from './life_succession.js';
 import {observers} from './warfare.js';
 import {Simulation, Person, Settlement, Sickness, Lineage, Country, NameGenerator} from './civsim.js';
 import {serialize, deserialize, Counter, TupleMap} from './runtime.js';
@@ -147,8 +148,13 @@ export class Engine {
   playAs(id) {
     const life = this.life ??= new Life(), p = this.sim.people.get(Number(id));
     if (!p) throw Error('Pick a living person to play as.');
-    life.player = newPlayer(this.sim, p.id);
+    life.player = newPlayer(this.sim, p.id); life.touch(this.sim);
     return {view: playerView(this.sim, life), snapshot: null};
+  }
+  /** The person you played has died: carry on as one of their heirs (or 'random' when no family is left). */
+  succeed(pick) {
+    const life = this.life; succeed(this.sim, life, pick === 'random' ? pick : Number(pick));
+    return {view: playerView(this.sim, life), snapshot: this.snapshot()};
   }
   stopPlaying() { if (this.life) this.life.player = null; return {view: null, snapshot: null}; }
   playerView() { return this.life ? playerView(this.sim, this.life) : null; }
@@ -195,7 +201,7 @@ export class Engine {
     if (act === 'auto') { runSeason(sim, life, season); text = describeChange(sim, before, life.view(sim, p)); }
     else { runSeason(sim, life, season, pl.id); text = perform(sim, life, p, season, act, arg); }
     pl.log.unshift({year: sim.year, season, text}); if (pl.log.length > 40) pl.log.length = 40;
-    pl.season++;
+    pl.season++; life.touch(sim);
     return {ticked, paused: false};
   }
 

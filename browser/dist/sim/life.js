@@ -9,13 +9,13 @@
 //   moved [settlementId]           allegiance [countryId, settlementId]   annexed [countryId, settlementId]   promoted [role, countryId]   lost [role, countryId]
 //   job [job]                      rich [tier 1|2]                         founded [settlementId]       survived [disease]
 //   wounded [countryId]            fought [countryId, lastYear]            event [category, text]
-//   venture [profit]               insight []
+//   venture [profit]               insight []                              heir [predecessorId, money]
 //
 // "People shape the world" (life.flow) decides where what people do each season lands. Off: in a private overlay
 // (track) that only this layer reads. On: in the simulation itself, so it changes towns, offices and fortunes for real.
 
 export const MAX_TAGS = 24;
-const WEIGHT = {founded: 9, promoted: 8, survived: 7, rich: 6, insight: 5, event: 5, venture: 4, allegiance: 4, wounded: 4, annexed: 3, lost: 3, fought: 3, moved: 2, job: 2};
+const WEIGHT = {heir: 6, founded: 9, promoted: 8, survived: 7, rich: 6, insight: 5, event: 5, venture: 4, allegiance: 4, wounded: 4, annexed: 3, lost: 3, fought: 3, moved: 2, job: 2};
 
 /** Wealth cut-offs for "among the richest tenth" and "top one percent". */
 function thresholds(people) {
@@ -50,7 +50,15 @@ export class Life {
   capture(sim) {
     const t = thresholds(sim.people), people = new Map();
     for (const p of sim.people.values()) people.set(p.id, [p.settlement, p.country, p.public_role || '', p.job, p.infection, p.wounded_until ?? 0, tierOf(p.wealth, t)]);
+    this.touch(sim);
     return {people, settlements: new Set(sim.settlements.keys()), history: sim.history.length};
+  }
+
+  /** Remember how the person you play stands (money, fame, office), so that their estate is known after they die. */
+  touch(sim) {
+    const pl = this.player, p = pl && sim.people.get(pl.id); if (!p) return;
+    const v = this.view(sim, p);
+    pl.mark = {wealth: v.wealth, real: p.wealth ?? 0, fame: v.fame, role: v.role, ruler: sim.countries.get(v.country)?.ruler === p.id, country: v.country};
   }
 
   /** Soldiers called up this year (fed by the hook in warfare.js). */
@@ -188,6 +196,7 @@ export class Life {
         fought: () => (b > year ? `Served in the army of ${land(a)} until year ${b}.` : `Served in the army of ${land(a)}.`),
         venture: () => `Made a profit of ${a} on a trading venture.`,
         insight: () => 'Made a scientific breakthrough.',
+        heir: () => `Took up the name and legacy of ${name(a)}${b ? `, inheriting ${Math.round(b).toLocaleString('en-US')}` : ''}.`,
         event: () => sim.render_history(b)
       }[code]?.();
       if (text) lines.push({year, text});
@@ -206,7 +215,7 @@ export class Life {
   summary(sim, p) {
     const alive = sim.people.has(p.id), land = sim.countries.get(p.country)?.name ?? 'nowhere';
     const marks = (this.tags.get(p.id) ?? []).slice().sort((a, b) => WEIGHT[b[1]] - WEIGHT[a[1]]).slice(0, 3).map(([, code, a]) => ({
-      venture: 'a successful trader', insight: 'made a breakthrough', founded: 'founded a town', promoted: `rose to ${a}`, survived: `survived ${a}`, rich: a >= 2 ? 'among the richest' : 'wealthy', event: 'noted in the records',
+      venture: 'a successful trader', insight: 'made a breakthrough', founded: 'founded a town', heir: 'an heir', promoted: `rose to ${a}`, survived: `survived ${a}`, rich: a >= 2 ? 'among the richest' : 'wealthy', event: 'noted in the records',
       allegiance: 'emigrated', annexed: 'lived through a change of rulers', wounded: 'wounded in war', lost: 'left office', fought: 'a soldier', moved: 'moved house', job: 'changed trade'
     }[code]));
     const who = `${alive ? p.age : `died at ${p.age}`}, ${p.public_role || p.job || 'resident'} of ${land}`;
@@ -218,7 +227,7 @@ export class Life {
   static fromJSON(data) {
     const life = new Life();
     if (data && (data.v === 1 || data.v === 2) && Array.isArray(data.tags)) for (const [id, list] of data.tags) if (Array.isArray(list)) life.tags.set(Number(id), list.slice(-MAX_TAGS));
-    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : [], choice: data.player.choice ?? null, last: data.player.last ?? {}, eventKey: data.player.eventKey ?? null}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
+    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), gen: data.player.gen ?? 1, line: Array.isArray(data.player.line) ? data.player.line.slice(-12) : [], mark: data.player.mark ?? null, since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : [], choice: data.player.choice ?? null, last: data.player.last ?? {}, eventKey: data.player.eventKey ?? null}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
     return life;
   }
 }

@@ -47,6 +47,17 @@ with sync_playwright() as p:
     assert page.evaluate("window.__map.snap.player.choice !== null")
     answer(); assert page.locator('#choice-dialog[open]').count() == 0 and page.inner_text('#year-num') == year, 'answering resumes without skipping time'
     page.click('#step'); idle(); answer(); assert page.locator('.pm-clock').is_visible()
+    # when the person dies they choose who carries on: family with what each inherits, or a random person if none is left
+    pid = page.evaluate("window.__map.snap.player.id")
+    page.evaluate('document.activeElement.blur()'); page.keyboard.press('`'); page.fill('#command', 'delete person %s' % pid); page.press('#command', 'Enter'); idle(); page.keyboard.press('Escape')
+    page.click('[data-tab="person"]'); idle()
+    assert 'YOU DIED' in page.inner_text('.pm-head'), 'the death screen appears'
+    heirs = page.locator('[data-play-heir]').count()
+    assert heirs <= 8 and (heirs or page.locator('[data-play-random]').count() == 1), 'heirs, or the random fallback when none are left'
+    if heirs: assert page.locator('.heir .heir-gets li').count() >= heirs and page.locator('.heir small').first.inner_text().startswith('Age'), 'each heir shows age, role, place and what they inherit'
+    (page.locator('[data-play-heir]').first if heirs else page.locator('[data-play-random]')).click(); idle()
+    assert page.evaluate("window.__map.snap.player.alive && window.__map.snap.player.id !== %s" % pid) and page.locator('.pm-act').count() >= 4, 'play goes on as the next person'
+    if heirs: assert 'Generation 2' in page.inner_text('.pm-head'), 'the line is counted'
     page.click('[data-play-stop]'); idle(); assert page.locator('[data-tab="person"]').count() == 0, 'stopping leaves person mode'
     page.click('[data-tab="overview"]')
     page.click('#new-world'); page.fill('#new-form [name=seed]', '42'); page.click('#new-form button[type=submit]')  # back to the year-0 world the later checks expect
@@ -214,5 +225,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, person mode, life-choice pop-ups, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, person mode, life-choice pop-ups, heirs and succession, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()
