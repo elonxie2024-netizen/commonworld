@@ -9,4 +9,7 @@ export class BrowserSimulation {
  exportSave(){return this.request('exportSave');}
  importSave(text){return this.request('importSave',text);}
  lifeStory(id){return this.request('lifeStory',id);}
+ playAs(id){return this.request('playAs',id);}
+ stopPlaying(){return this.request('stopPlaying');}
+ playSeason(act,arg){return this.request('playSeason',act,arg);}
 }

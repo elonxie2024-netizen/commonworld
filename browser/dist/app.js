@@ -7,6 +7,7 @@ import { InfluenceBar } from './ui/influences.js';
 import { Pings } from './ui/pings.js';
 import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
 import { Editor } from './ui/editor.js';
+import { playerPanel, PlayerMarker } from './ui/player.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -22,7 +23,8 @@ const SECTIONS = [
   ['tech', 'Tech tree', 'tree', 'Fifteen ages of discovery: what each country knows, is researching, and what it unlocks.'],
   ['health', 'Health', 'pulse', 'Diseases, active infections, and outbreaks.'],
   ['wars', 'Wars', 'swords', 'Active conflicts and peace negotiations.'],
-  ['events', 'Event log', 'list', 'Everything that has happened, newest first.']
+  ['events', 'Event log', 'list', 'Everything that has happened, newest first.'],
+  ['person', 'My person', 'user', 'The person you are playing: choose what they do each season.']
 ];
 const EV_ICONS = { war: 'swords', sickness: 'pulse', disease: 'pulse', discovery: 'bulb', discoveries: 'bulb', political: 'flag', creative: 'star', disaster: 'bolt', population: 'users', lineage: 'dna' };
 const PAGE = 48;
@@ -106,7 +108,7 @@ function setSnap(s) {
     if (p.alive !== false) { idx.living.push(p); push(idx.residents, p.settlement, p); }
     for (const parent of p.parents || []) push(idx.kids, parent, p);
   }
-  if (map) { map.setData(s); pings.update(s, map); renderTray(); }
+  if (map) { playerMark.update(s, map); map.setData(s); pings.update(s, map); renderTray(); }
 }
 const cc = id => PALETTE[(idx?.cIndex.get(String(id)) ?? 0) % PALETTE.length];
 const activeCountries = () => snap.countries.filter(c => c.population > 0 || c.ended == null);
@@ -240,6 +242,7 @@ const LINKS = [
 
 // ---------- views ----------
 const VIEWS = {
+  person() { return playerPanel(snap.player, { esc, num, tag, stat, icon, cc, progressBar }); },
   overview() {
     const infected = idx.living.filter(p => p.infection).length, places = livePlaces(), countries = snap.countries.filter(c => c.population > 0);
     const found = new Set(snap.countries.flatMap(c => [...c.technologies, ...c.innovations])).size;
@@ -457,6 +460,7 @@ const DIALOGS = {
     <div class="dlg-body"><div class="statgrid">${stat('Age', p.age)}${stat('Born', 'year ' + p.born)}${stat('Occupation', esc(p.job || 'resident'))}${stat('Wealth', num(p.wealth, 1))}${stat('Fame', num(p.fame, 1))}${stat('Lineage', esc(p.lineageName))}</div>
     <div class="linkrow"><span>Country</span>${country ? chipLink('country', country) : '—'}<span>Home</span>${place ? chipLink('settlement', place) : '—'}</div>
     ${parents.length || kids.length ? `<h3 class="sub">Family</h3><div class="linkrow">${parents.length ? '<span>Parents</span>' : ''}${parents.map(x => chipLink('person', x)).join('')}${kids.length ? '<span>Children</span>' : ''}${kids.slice(0, 12).map(x => chipLink('person', x)).join('')}${kids.length > 12 ? `<small class="muted">+${kids.length - 12} more</small>` : ''}</div>` : ''}
+    ${alive ? `<div class="actions"><button class="primary" data-play-as="${p.id}">${icon('user')} Play as this person</button></div>` : ''}
     <h3 class="sub">Life story <small class="muted">stitched together from their milestones</small></h3><div class="life-story" data-life="${p.id}"><p class="muted">Gathering their story…</p></div>
     <div class="actions"><button class="soft" data-report="${esc('person ' + n)}">${icon('list')} Full life report</button></div>
     </div>`;
@@ -598,7 +602,7 @@ function openReport(title, text) {
 
 // ---------- rendering ----------
 function renderNav() {
-  $('#navigation').innerHTML = SECTIONS.map(([id, label, ic]) => {
+  $('#navigation').innerHTML = SECTIONS.filter(s => s[0] !== 'person' || snap?.player).map(([id, label, ic]) => {
     const badge = id === 'wars' && snap?.wars.length ? `<em>${snap.wars.length}</em>` : id === 'health' && snap ? (n => n ? `<em>${n > 999 ? '999+' : n}</em>` : '')(idx.living.filter(p => p.infection).length) : '';
     return `<button data-tab="${id}" class="${section === id ? 'active' : ''}" ${section === id ? 'aria-current="page"' : ''}>${icon(ic)}<span>${label}</span>${badge}</button>`;
   }).join('');
@@ -613,6 +617,7 @@ function renderTop() {
 }
 function render(force = false) {
   if (!snap) return;
+  if (section === 'person' && !snap.player) section = 'overview'; // nobody is being played any more
   renderNav(); renderTop();
   $('#content').innerHTML = VIEWS[section]();
   if (RESULTS[section]) renderResults();
@@ -690,6 +695,7 @@ const map = new WorldMap(mapHost, {
 });
 window.__map = map; // handy for debugging and automated checks
 const pings = new Pings(); map.addLayer(pings); window.__pings = pings;
+const playerMark = new PlayerMarker(); map.addLayer(playerMark);
 const pingTray = document.createElement('div'); pingTray.className = 'ping-slot'; mapHost.append(pingTray);
 function renderTray() { pingTray.innerHTML = pings.tray(esc); }
 // Jump: the map centres on the event. Clicking the ping itself opens what it is about.
@@ -838,12 +844,34 @@ function influenceGo(kind, id) {
   influences.arm(kind, [{ id: item.id, name: item.name, country: item.country ?? item.id }]);
 }
 
+// ---------- person mode ----------
+// Playing one person: choices go to the worker one season at a time; a new year only starts when spring does.
+async function startPlaying(id) {
+  playing = false; stopFlag = true; updatePlay();
+  if (snap.player && String(snap.player.id) !== String(id) && !window.confirm('Switch to this person? You stop playing ' + snap.player.name + '.')) return;
+  await work(async () => { await sim.playAs(id); setSnap(await sim.getSnapshot()); $$('dialog[open]').forEach(dd => dd.close()); section = 'person'; render(true); window.scrollTo({ top: 0 }); });
+}
+async function playSeasonUI(act, arg) {
+  playing = false; stopFlag = true; updatePlay();
+  await work(async () => {
+    const r = await sim.playSeason(act, arg);
+    if (r.snapshot) setSnap(r.snapshot); else { snap.player = r.view; playerMark.update(snap, map); map.redraw(); }
+    render(true);
+    if (r.view?.log?.[0]) toast(r.view.log[0].text);
+  });
+}
+async function stopPlaying() { await work(async () => { await sim.stopPlaying(); setSnap(await sim.getSnapshot()); if (section === 'person') section = 'overview'; render(true); toast('You stopped playing.'); }); }
+
 // ---------- global clicks ----------
 document.addEventListener('click', e => {
   const t = e.target; let el;
   if ((el = t.closest('[data-tab]'))) { $$('dialog[open]').forEach(d => d.close()); switchSection(el.dataset.tab); return; }
   if ((el = t.closest('[data-run]'))) { runCmd(el.dataset.run, { confirm: el.dataset.confirm }); return; }
   if ((el = t.closest('[data-report]'))) { runCmd(el.dataset.report, { to: 'report' }); return; }
+  if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
+  if ((el = t.closest('[data-play-act]'))) { const act = el.dataset.playAct, sel = $(`#play-arg-${act}`); playSeasonUI(act, el.dataset.playArg ?? (sel ? sel.value : null)); return; }
+  if (t.closest('[data-play-stop]')) { stopPlaying(); return; }
+  if (t.closest('[data-play-random]')) { const pool = idx.living.filter(p => p.age >= 18); if (pool.length) startPlaying(pool[Math.floor(Math.random() * pool.length)].id); return; }
   if ((el = t.closest('[data-edit]'))) { const [type, ...id] = el.dataset.edit.split(':'); openEditor({ type, id: id.join(':') }); return; }
   if ((el = t.closest('[data-edit-back]'))) { if (dialog) showDialog(dialog.type, dialog.id); return; }
   if ((el = t.closest('[data-ping]'))) { const p = pings.find(el.dataset.ping); if (p) jumpPing(p); return; }

@@ -25,7 +25,16 @@ with sync_playwright() as p:
     page.click('[data-tab="people"]'); page.locator('[data-person]').first.click()
     page.wait_for_selector('#detail-dialog .life-lines li', timeout=15000)
     assert "Born" in page.inner_text("#detail-dialog .life-lines li"), "life story begins with the birth"
-    page.click('#detail-dialog .close'); page.click('[data-tab="overview"]')
+    # person mode: play as them, choose seasons by hand, Step plays them for you, stop
+    page.click('[data-play-as]'); idle()
+    assert page.inner_text('#page-title') == 'My person' and page.locator('.pm-act').count() >= 4, 'person mode opens with choices'
+    page.click('[data-play-act="study"]'); idle(); page.click('[data-play-act="work"]'); idle()
+    assert page.locator('.pm .life-lines li').count() >= 2 and 'Autumn' in page.inner_text('.pm-clock'), 'seasons come one at a time'
+    page.click('#step'); idle(); assert page.locator('.pm-clock').is_visible()
+    page.click('[data-play-stop]'); idle(); assert page.locator('[data-tab="person"]').count() == 0, 'stopping leaves person mode'
+    page.click('[data-tab="overview"]')
+    page.click('#new-world'); page.fill('#new-form [name=seed]', '42'); page.click('#new-form button[type=submit]')  # back to the year-0 world the later checks expect
+    page.wait_for_function("document.querySelector('#year-num').textContent==='0'", timeout=120000); idle()
 
     def command(text):
         if page.locator('#dock').is_hidden():
@@ -189,5 +198,5 @@ with sync_playwright() as p:
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), 'Horizontal mobile overflow'
     assert not errors, errors
-    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
+    print(json.dumps({'browser': 'Chrome', 'errors': errors, 'checks': 'life stories, person mode, people switch, hidden console, influences, edit panels, unit panels, pings, news panel, commands, borders, eradication gate, map views, all pages, dialogs, 40-year speed, every map layer toggle, resources stay off, sprites hover/click/hide, political map, economy and tech pages, mobile overflow'}))
     browser.close()

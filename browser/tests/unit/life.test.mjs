@@ -167,3 +167,97 @@ test('the life command reports and rejects politely', () => {
   assert.match(e.command('life status').output, /People shape the world: off/);
   assert.match(e.command('life nonsense').output, /^Use: life flow/);
 });
+
+// ---- person mode
+function playable(flow) {
+  const g = new Engine(); g.create({population: 1500, seed: 42});
+  if (flow) g.command('life flow on');
+  g.step(12);
+  const p = [...g.sim.people.values()].find(q => q.age >= 25 && q.age <= 45 && g.life.view(g.sim, q).wealth > 10);
+  return {g, id: p.id};
+}
+
+test('playing a person: a year ticks only when spring begins, and seasons come one at a time', () => {
+  const {g, id} = playable(false), y = g.sim.year;
+  const first = g.playAs(id).view;
+  assert.equal(first.next.season, 0); assert.equal(first.next.year, y + 1);
+  assert.ok(first.actions.some(a => a.id === 'work') && first.actions.some(a => a.id === 'auto'));
+  const r1 = g.playSeason('study');
+  assert.equal(g.sim.year, y + 1, 'spring started a new year');
+  assert.ok(r1.snapshot, 'a new year sends a fresh snapshot');
+  assert.equal(r1.view.next.name, 'Summer');
+  assert.match(r1.view.log[0].text, /studying/);
+  const r2 = g.playSeason('work');
+  assert.equal(g.sim.year, y + 1); assert.equal(r2.snapshot, null, 'no snapshot when nothing but the overlay changed');
+  g.playSeason('auto'); const r4 = g.playSeason('auto');
+  assert.equal(r4.view.next.year, y + 2); assert.equal(g.sim.year, y + 1, 'the next year waits for the next spring');
+  assert.equal(r4.view.log.length, 4);
+});
+
+test('the Step button plays the person for you, one year per step', () => {
+  const {g, id} = playable(false), y = g.sim.year;
+  g.playAs(id); g.step(3);
+  assert.equal(g.sim.year, y + 3);
+  assert.ok(g.life.player.log.length >= 8, 'their seasons were lived and recorded');
+});
+
+test('choices: travel, retrain and offices are validated', () => {
+  const {g, id} = playable(false);
+  const v = g.playAs(id).view, mv = v.actions.find(a => a.id === 'move');
+  const r = g.playSeason('move', mv.options[0].value);
+  assert.notEqual(r.view.home.id, v.home.id);
+  assert.throws(() => g.playSeason('move', '999999'), /not possible/);
+  assert.throws(() => g.playSeason('retrain', 'wizard'), /not possible/);
+  assert.throws(() => g.playSeason('office', 'king'), /not possible/);
+  assert.throws(() => g.playSeason('dance'), /Unknown action/);
+});
+
+test('with the switch off the choices stay in the overlay; on, they change the world', () => {
+  const off = playable(false); off.g.playAs(off.id);
+  off.g.playSeason('work'); // spring: the year ticks first
+  const w0 = off.g.sim.people.get(off.id).wealth, v0 = off.g.playerView().wealth;
+  for (let i = 0; i < 3; i++) off.g.playSeason('work');
+  assert.equal(off.g.sim.people.get(off.id).wealth, w0, 'the simulation is untouched');
+  assert.ok(off.g.playerView().wealth > v0);
+  const on = playable(true); on.g.playAs(on.id);
+  on.g.playSeason('work');
+  const w1 = on.g.sim.people.get(on.id).wealth; for (let i = 0; i < 3; i++) on.g.playSeason('work');
+  assert.ok(on.g.sim.people.get(on.id).wealth > w1, 'real wealth rose');
+});
+
+test('moving abroad makes you a citizen there when the world follows', () => {
+  const {g, id} = playable(true);
+  const v = g.playAs(id).view, abroad = v.actions.find(a => a.id === 'move').options.map(o => g.sim.settlements.get(Number(o.value))).find(s => s.country !== v.country.id);
+  if (!abroad) return;
+  g.playSeason('move', String(abroad.id));
+  assert.equal(g.sim.people.get(id).country, abroad.country);
+});
+
+test('dying ends the run of play and names the children; stop clears it', () => {
+  const {g, id} = playable(false); g.playAs(id);
+  g.command(`delete person ${id}`);
+  const v = g.playerView();
+  assert.equal(v.alive, false); assert.ok(Array.isArray(v.kids));
+  assert.throws(() => g.playSeason('work'), /has died/);
+  g.stopPlaying(); assert.equal(g.playerView(), null); assert.equal(g.snapshot().player, null);
+  assert.throws(() => g.playSeason('work'), /Nobody is being played/);
+  assert.throws(() => g.playAs(99999999), /living person/);
+});
+
+test('the person you play survives a save and load', () => {
+  const {g, id} = playable(false); g.playAs(id); g.playSeason('study'); g.playSeason('trade');
+  const copy = new Engine(); copy.importSave(g.exportSave());
+  const a = g.playerView(), b = copy.playerView();
+  assert.equal(b.id, id); assert.deepEqual(b.log, a.log); assert.deepEqual(b.next, a.next);
+});
+
+test('playing a person never changes a world with the switch off', () => {
+  const a = new Engine(), b = new Engine();
+  a.create({population: 600, seed: 8}); b.create({population: 600, seed: 8});
+  a.step(6); b.step(6);
+  const id = [...a.sim.people.values()].find(p => p.age > 25).id;
+  a.playAs(id); for (let i = 0; i < 12; i++) a.playSeason(['trade', 'study', 'work', 'auto'][i % 4]);
+  b.step(3);
+  assert.equal(JSON.stringify(a.sim.rng.getstate()), JSON.stringify(b.sim.rng.getstate()));
+  assert.equal(a.sim.people.size, b.sim.people.size);
+});

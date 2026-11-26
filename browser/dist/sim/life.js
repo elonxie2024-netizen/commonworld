@@ -28,7 +28,7 @@ function thresholds(people) {
 const tierOf = (wealth, t) => ((wealth ?? 0) >= t.p99 ? 2 : (wealth ?? 0) >= t.p90 ? 1 : 0);
 
 export class Life {
-  constructor() { this.tags = new Map(); this.track = new Map(); this.flow = false; }
+  constructor() { this.tags = new Map(); this.track = new Map(); this.flow = false; this.player = null; }
 
   // ---- recording
   add(id, year, code, a = null, b = null) {
@@ -214,11 +214,11 @@ export class Life {
   }
 
   // ---- saving
-  toJSON() { return {v: 2, flow: this.flow, tags: [...this.tags], track: [...this.track]}; }
+  toJSON() { return {v: 2, flow: this.flow, tags: [...this.tags], track: [...this.track], player: this.player}; }
   static fromJSON(data) {
     const life = new Life();
     if (data && (data.v === 1 || data.v === 2) && Array.isArray(data.tags)) for (const [id, list] of data.tags) if (Array.isArray(list)) life.tags.set(Number(id), list.slice(-MAX_TAGS));
-    if (data?.v === 2) { life.flow = !!data.flow; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
+    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : []}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
     return life;
   }
 }

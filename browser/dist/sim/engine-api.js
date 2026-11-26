@@ -9,7 +9,8 @@ import {INNOVATIONS} from './discoveries.js';
 import {TECHNOLOGIES, EVENT_CATALOG} from './society.js';
 import {command} from './civic.js';
 import {Life} from './life.js';
-import {runSeasons} from './life_seasons.js';
+import {runSeasons, runSeason} from './life_seasons.js';
+import {newPlayer, perform, playerView, describeChange} from './life_player.js';
 import {observers} from './warfare.js';
 import {Simulation, Person, Settlement, Sickness, Lineage, Country, NameGenerator} from './civsim.js';
 import {serialize, deserialize, Counter, TupleMap} from './runtime.js';
@@ -81,7 +82,13 @@ export class Engine {
 
   step(count = 1) {
     if (!Number.isInteger(count) || count < 1 || count > 100) throw Error('Advance between 1 and 100 years at a time.');
-    for (let i = 0; i < count; i++) this.tickYear();
+    for (let i = 0; i < count; i++) {
+      const pl = this.life?.player;
+      if (pl && this.sim.people.has(pl.id)) { // somebody is being played: their seasons are taken one by one, left to the usual way
+        let ticked = false;
+        for (let guard = 0; !ticked && guard < 9 && this.sim.people.has(pl.id); guard++) ticked = this._playSeason('auto');
+      } else this.tickYear();
+    }
     return this.snapshot();
   }
 
@@ -125,12 +132,48 @@ export class Engine {
   }
 
   /** One year of the simulation, with the life layer watching (it only reads). */
-  tickYear() {
+  tickYear({seasons = true} = {}) {
     const life = this.life ??= new Life(), before = life.capture(this.sim);
     observers.levy = (sim, country, army) => life.onLevy(sim, country, army);
     try { this.sim.tick(false); } finally { observers.levy = null; }
-    runSeasons(this.sim, life); // four seasons of what people do, then the diff notes what happened to whom
+    if (seasons) runSeasons(this.sim, life); // four seasons of what people do, then the diff notes what happened to whom
     life.observe(this.sim, before);
+  }
+
+  // ---- person mode
+  /** Start playing a living person. */
+  playAs(id) {
+    const life = this.life ??= new Life(), p = this.sim.people.get(Number(id));
+    if (!p) throw Error('Pick a living person to play as.');
+    life.player = newPlayer(this.sim, p.id);
+    return {view: playerView(this.sim, life), snapshot: null};
+  }
+  stopPlaying() { if (this.life) this.life.player = null; return {view: null, snapshot: null}; }
+  playerView() { return this.life ? playerView(this.sim, this.life) : null; }
+
+  /** Play one season as the chosen person ('auto' lets it pass the usual way). The year ticks before spring. */
+  playSeason(act = 'auto', arg = null) {
+    const ticked = this._playSeason(act, arg), life = this.life;
+    return {view: playerView(this.sim, life), snapshot: ticked || life.flow ? this.snapshot() : null};
+  }
+  /** Returns true when the year ticked. */
+  _playSeason(act, arg) {
+    const life = this.life, pl = life?.player, sim = this.sim;
+    if (!pl) throw Error('Nobody is being played. Click a person and choose Play as.');
+    if (!sim.people.has(pl.id)) throw Error('Your person has died. Choose someone else to play.');
+    let ticked = false;
+    if (pl.season >= 4) {
+      this.tickYear({seasons: false}); pl.season = 0; ticked = true;
+      if (!sim.people.has(pl.id)) { const a = sim.archive.get(pl.id); pl.log.unshift({year: sim.year, season: 0, text: `You died at ${a.age}${a.cause_of_death ? ` of ${a.cause_of_death}` : ''}.`}); pl.season = 4; return true; }
+    }
+    delete sim._command_undo; // seasons change the world outside an edit
+    const p = sim.people.get(pl.id), season = pl.season, before = life.view(sim, p);
+    let text;
+    if (act === 'auto') { runSeason(sim, life, season); text = describeChange(sim, before, life.view(sim, p)); }
+    else { runSeason(sim, life, season, pl.id); text = perform(sim, life, p, season, act, arg); }
+    pl.log.unshift({year: sim.year, season, text}); if (pl.log.length > 40) pl.log.length = 40;
+    pl.season++;
+    return ticked;
   }
 
   /** A person's story, stitched together now from their milestone tags and the archive. */
@@ -298,7 +341,7 @@ export class Engine {
       events: this.events(sim, lineages),
       reports,
       catalog: {foundations: TECHNOLOGIES.size, innovations: INNOVATIONS.size, events: EVENT_CATALOG.length},
-      canUndo: !!sim._command_undo, lifeFlow: !!this.life?.flow,
+      canUndo: !!sim._command_undo, lifeFlow: !!this.life?.flow, player: this.life?.player ? playerView(sim, this.life) : null,
     };
   }
 
