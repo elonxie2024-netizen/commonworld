@@ -29,6 +29,13 @@ with sync_playwright() as p:
     page.click('[data-play-as]'); idle()
     assert page.evaluate("document.body.classList.contains('pm-mode')") and not page.locator('.sidebar').is_visible() and not page.locator('#step').is_visible() and not page.locator('.year-pill').is_visible(), 'person mode hides the simulation controls'
     assert page.locator('.pm-focus').count() >= 4 and page.locator('.pm-stat').count() >= 7, 'person mode opens with focuses and stats'
+    # depth: goals, property and people live on their own pages
+    page.click('[data-pm-main="goals"]'); assert page.locator('[data-depth="ambition"]').count() >= 5 and page.locator('[data-depth="perk"]').count() >= 5, 'goals page offers ambitions and perks'
+    page.click('[data-depth="ambition"][data-depth-id="renown"]'); page.wait_for_selector('text=Change course'); assert 'Win renown' in page.inner_text('.pm-goal'), 'an ambition can be chosen'
+    page.click('[data-depth="perk"]:not([disabled])'); page.wait_for_selector('.pm-perk.own'); assert page.locator('.pm-perk.own').count() == 1, 'a perk can be learned'
+    page.click('[data-pm-main="property"]'); assert page.locator('[data-depth="buy"]').count() >= 5, 'property page lists things to buy'
+    page.click('[data-pm-main="people"]'); page.click('[data-depth="meet"]'); page.wait_for_timeout(400); assert 'People in your life' in page.inner_text('.pm-main'), 'people page opens'
+    page.click('[data-pm-main="life"]'); assert page.locator('.pm-focus').count() >= 4, 'the routine page is back'
     def answer():  # a life-choice pop-up must be answered before time moves on
         while page.locator('#choice-dialog[open]').count():
             page.locator('.choice-opt:not([disabled])').first.click(); idle(); page.wait_for_timeout(100)

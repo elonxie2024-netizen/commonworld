@@ -811,3 +811,26 @@ body.pm-mode .panel{background:#fffdf9}
 .pm-track i{background:#2a2118}
 body.pm-mode .topbar .title{display:none}
 body.pm-mode .topbar{justify-content:flex-end;padding:12px var(--gutter)}
+
+/* ---------- Person mode: goals, property, people ---------- */
+.pm-nav{display:flex;gap:6px;padding:4px;border-radius:99px;background:#efe8da;width:max-content;max-width:100%;overflow-x:auto}
+.pm-nav button{border:0;background:transparent;padding:9px 20px;border-radius:99px;font-weight:700;font-size:14px;color:#6b5d48;display:inline-flex;gap:8px;align-items:center}
+.pm-nav button.on{background:#2a2118;color:#fff}
+.pm-nav em{font-style:normal;background:#facc15;color:#2a2118;border-radius:99px;padding:0 7px;font-size:11px;font-weight:800}
+.pm-traits{margin:0 0 12px}
+.pm-goal,.pm-pick,.pm-perk{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:14px;background:#f8f4ec}
+.pm-goal>div,.pm-pick>div,.pm-perk>div{display:grid;gap:3px;min-width:0;flex:1}
+.pm-goal small,.pm-pick small,.pm-perk small{color:var(--muted);font-size:12.3px;line-height:1.4}
+.pm-picks,.pm-perks{display:grid;gap:8px}
+.pm-goal{background:#fff3d1}
+.pm-pick.off{opacity:.62}
+.pm-perk.own{background:#ecf8ee}
+.pm-track.thin{height:5px}
+.pm-track.rival i{background:#be123c}
+.pm-bonds{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.pm-bond{display:grid;gap:5px;align-content:start;padding:12px 14px;border-radius:16px;background:#f8f4ec;border-left:4px solid var(--c)}
+.pm-bond-top{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.pm-bond small{color:var(--muted);font-size:12px}
+.pm-bond-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.pm-bond-acts .soft{padding:6px 11px;font-size:12.5px}
+@media(max-width:900px){.pm-nav button{padding:8px 14px}}

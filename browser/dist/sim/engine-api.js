@@ -12,6 +12,7 @@ import {Life} from './life.js';
 import {runSeasons, runSeason} from './life_seasons.js';
 import {newPlayer, perform, playerView, oneOffs} from './life_player.js';
 import {newStats, context, focusSpecs, runFocus} from './life_careers.js';
+import {depthSeason, depthAct, ensureDepth} from './life_depth.js';
 import {detect, resolveChoice} from './life_events.js';
 import {succeed} from './life_succession.js';
 import {observers} from './warfare.js';
@@ -180,6 +181,17 @@ export class Engine {
     const life = this.life; succeed(this.sim, life, pick === 'random' ? pick : Number(pick));
     return {view: playerView(this.sim, life), snapshot: this.snapshot()};
   }
+  /** Something done by choice, apart from the routine: set an ambition, buy a perk or property, start a project, see to the people in your life. */
+  depth(kind, id = null, arg = null) {
+    const life = this.life, pl = life?.player, sim = this.sim, p = pl && sim.people.get(pl.id);
+    if (!p) throw Error('Nobody is being played.');
+    delete sim._command_undo;
+    const r = depthAct(sim, life, p, String(kind), id == null ? null : String(id), arg);
+    pl.log.unshift({year: sim.year, season: Math.min(pl.season, 3), text: r.text}); if (pl.log.length > 40) pl.log.length = 40;
+    if (r.tag) life.add(p.id, sim.year, 'event', 'choice', r.tag);
+    life.touch(sim);
+    return {view: playerView(sim, life), snapshot: null};
+  }
   stopPlaying() { if (this.life) this.life.player = null; return {view: null, snapshot: null}; }
   playerView() { return this.life ? playerView(this.sim, this.life) : null; }
 
@@ -227,7 +239,9 @@ export class Engine {
     let text;
     if (auto && !['move', 'retrain', 'office'].includes(act)) text = runFocus(context(sim, life, p, season), act);
     else { try { text = perform(sim, life, p, season, act, arg); } catch (e) { if (!auto) throw e; text = runFocus(context(sim, life, p, season), pl.focus || 'work'); } } // a queued move that is no longer possible gives way to your focus
-    pl.log.unshift({year: sim.year, season, text}); if (pl.log.length > 40) pl.log.length = 40;
+    pl.log.unshift({year: sim.year, season, text});
+    for (const line of depthSeason(sim, life, p, season)) pl.log.unshift({year: sim.year, season, text: line}); // property, projects, ambition, people
+    if (pl.log.length > 40) pl.log.length = 40;
     pl.season++; life.touch(sim);
     return {ticked, paused: false};
   }
@@ -255,6 +269,7 @@ export class Engine {
     if (at > 0) { try { life = Life.fromJSON(JSON.parse(text.slice(at + 8, -1))); } catch { /* an older save: start with no tags */ } }
     this.life = life;
     const pl = life.player; // an older save has no stats or focus yet
+    if (pl) ensureDepth(this.sim, pl);
     if (pl && !pl.stats) { pl.stats = newStats(this.sim.people.get(pl.id) ?? this.sim.archive.get(pl.id) ?? {age: 20}); pl.focus ??= 'work'; pl.queue ??= null; }
     return this.snapshot();
   }

@@ -14,8 +14,10 @@ import {dice, DISPLACES} from './life_seasons.js';
 import {towns, liveChoice} from './life_player.js';
 import {bump} from './life_careers.js';
 import {_infect} from './edit_commands.js';
+import * as MOMENT from './life_moments.js';
+import {mods, gainTrait} from './life_traits.js';
 
-export const COOLDOWN = {war: 4, plague: 3, famine: 3, settlers: 2, office: 3, rival: 5};
+export const COOLDOWN = {war: 4, plague: 3, famine: 3, settlers: 2, office: 3, rival: 5, ...MOMENT.COOLDOWN};
 export const KINDS = Object.keys(COOLDOWN);
 const money = n => Math.round(n).toLocaleString('en-US');
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -171,6 +173,7 @@ export function resolveChoice(sim, life, p, choice, optionId) {
   if (!o.enabled) throw Error(o.why || 'That choice is not available.');
   const x = context(sim, life, p, choice.season), out = RESOLVE[choice.kind](x, optionId, choice.data);
   bump(life.player.stats, EFFECT[`${choice.kind}/${optionId}`]);
+  const trait = TRAIT[`${choice.kind}/${optionId}`]; if (trait) gainTrait(life.player, trait);
   return out;
 }
 
@@ -191,6 +194,8 @@ const EFFECT = {
   'office/stand': {connections: 1}, 'office/back': {honor: 2, connections: 2}, 'rival/partner': {connections: 2}, 'rival/refuse': {honor: 1}, 'rival/contest': {skill: 1}
 };
 
+/** Choices that make you a certain kind of person. */
+const TRAIT = {'war/volunteer': 'veteran', 'war/command': 'veteran', 'war/medic': 'steadfast', 'plague/tend': 'steadfast', 'plague/cure': 'steadfast', 'famine/share': 'philanthropist', 'famine/granary': 'philanthropist', 'famine/relief': 'philanthropist', 'famine/hoard': 'miser', 'rival/contest': null};
 const RESOLVE = {
   war({sim, life, p, v, u, flow}, id, d) {
     if (id === 'medic') { const dw = 6 + u(60) * 8; life.apply(sim, p, {dw, df: 3}); return {text: `You served as a field medic and tended the wounded. You earned ${money(dw)} and a great deal of respect.`, tag: 'Served as a field medic in the war.'}; }
@@ -268,9 +273,11 @@ const RESOLVE = {
     const r = sim.people.get(d.rival), name = r ? sim.full_name(r) : 'your rival', rv = r ? life.view(sim, r) : {fame: v.fame};
     if (id === 'partner') { const dw = (8 + 0.05 * v.wealth) * (0.5 + u(32)); life.apply(sim, p, {dw, df: -1}); return {text: `You went into partnership with ${name} and made ${money(dw)}, though little of the credit was yours.`, tag: `Went into partnership with ${name}.`}; }
     if (id === 'refuse') { life.apply(sim, p, {df: 1}); return {text: `You turned ${name} down and went your own way.`, tag: ''}; }
-    const win = u(33) < clamp(0.5 + (v.fame - rv.fame) / 200 + (st.skill - 50) / 300, 0.15, 0.9);
+    const win = u(33) < clamp(0.5 + (v.fame - rv.fame) / 200 + (st.skill - 50) / 300 + mods(life.player).luck, 0.15, 0.9);
     life.apply(sim, p, win ? {df: 6} : {df: -4, dw: -spend(v, 8)});
     return {text: win ? `You bested ${name} in front of the whole trade, and your name grew.` : `${name} outdid you in the contest. It stung, and it cost you.`, tag: win ? `Bested ${name} in a contest.` : `Lost a contest to ${name}.`};
   }
 };
 
+// The ordinary moments of a life (life_moments.js) sit beside the big ones.
+Object.assign(BUILD, MOMENT.BUILD); Object.assign(RESOLVE, MOMENT.RESOLVE); Object.assign(EFFECT, MOMENT.EFFECT);

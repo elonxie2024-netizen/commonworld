@@ -7,13 +7,14 @@ import {OFFICES} from './civic.js';
 import {candidates} from './life_succession.js';
 import {LADDER, SEASON_NAMES, DISPLACES} from './life_seasons.js';
 import {newStats, honorWord, health, context, focusSpecs, runFocus, defaultFocus} from './life_careers.js';
+import {initDepth, depthView} from './life_depth.js';
 
 const money = n => Math.round(n).toLocaleString('en-US');
 
 /** The player's record, or null. { id, season (0-3 played this year; 4 = year over), log, since, choice, last, eventKey, gen, line, mark, stats, focus, queue } */
 export function newPlayer(sim, id, from = null) {
   const p = sim.people.get(id);
-  return {id, season: 4, log: [], since: sim.year, choice: null, last: {}, eventKey: null, gen: 1, line: [], mark: null, stats: newStats(p ?? sim.archive.get(id) ?? {age: 20}, from), focus: p ? defaultFocus(p) : 'work', queue: null};
+  return {id, season: 4, log: [], since: sim.year, choice: null, last: {}, eventKey: null, gen: 1, line: [], mark: null, stats: newStats(p ?? sim.archive.get(id) ?? {age: 20}, from), focus: p ? defaultFocus(p) : 'work', queue: null, ...initDepth(sim, id)};
 }
 
 /** Towns a person could travel to, nearest first. */
@@ -119,7 +120,7 @@ export function playerView(sim, life) {
     health: {infection: p.infection ?? null, woundedUntil: (p.wounded_until ?? 0) > sim.year ? p.wounded_until : 0, value: hl.value},
     world: {conditions, wars, ruler: c?.ruler != null ? sim.full_name(sim.archive.get(c.ruler)) : '', government: c?.government ?? '', stability: c?.stability ?? 0, food: c?.food ?? 0},
     parents, kids: heirs(sim, pl.id), nearby: towns(sim, life, p, 8), stats, focus,
-    focuses: specs.map(({run, ...f}) => f), oneoffs: oneOffs(sim, life, p), queued: pl.queue
+    focuses: specs.map(({run, ...f}) => f), oneoffs: oneOffs(sim, life, p), queued: pl.queue, depth: depthView(sim, life, p, v, st)
   };
 }
 

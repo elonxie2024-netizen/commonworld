@@ -16,4 +16,5 @@ export class BrowserSimulation {
  succeed(pick){return this.request('succeed',pick);}
  setFocus(id){return this.request('setFocus',id);}
  queueAct(act,arg){return this.request('queueAct',act,arg);}
+ depth(kind,id,arg){return this.request('depth',kind,id,arg);}
 }

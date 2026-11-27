@@ -227,9 +227,18 @@ export class Life {
   static fromJSON(data) {
     const life = new Life();
     if (data && (data.v === 1 || data.v === 2) && Array.isArray(data.tags)) for (const [id, list] of data.tags) if (Array.isArray(list)) life.tags.set(Number(id), list.slice(-MAX_TAGS));
-    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), gen: data.player.gen ?? 1, stats: data.player.stats ?? null, focus: data.player.focus ?? 'work', queue: data.player.queue ?? null, line: Array.isArray(data.player.line) ? data.player.line.slice(-12) : [], mark: data.player.mark ?? null, since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : [], choice: data.player.choice ?? null, last: data.player.last ?? {}, eventKey: data.player.eventKey ?? null}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
+    if (data?.v === 2) { life.flow = !!data.flow; if (data.player && Number.isInteger(data.player.id)) life.player = {id: data.player.id, season: Math.max(0, Math.min(4, data.player.season | 0)), gen: data.player.gen ?? 1, stats: data.player.stats ?? null, focus: data.player.focus ?? 'work', queue: data.player.queue ?? null, line: Array.isArray(data.player.line) ? data.player.line.slice(-12) : [], mark: data.player.mark ?? null, since: data.player.since ?? 0, log: Array.isArray(data.player.log) ? data.player.log.slice(0, 40) : [], choice: data.player.choice ?? null, last: data.player.last ?? {}, eventKey: data.player.eventKey ?? null, ...depthFrom(data.player)}; if (Array.isArray(data.track)) for (const [id, t] of data.track) if (t && typeof t === 'object') life.track.set(Number(id), t); }
     return life;
   }
+}
+
+/** The depth fields of a saved player record (see life_depth.js); an older save has none and gets them on loading. */
+const strs = a => (Array.isArray(a) ? a.filter(x => typeof x === 'string') : []);
+function depthFrom(d) {
+  if (!Array.isArray(d.traits)) return {};
+  return {traits: strs(d.traits), ambition: typeof d.ambition === 'string' ? d.ambition : null, doneAmb: strs(d.doneAmb), perks: strs(d.perks), pts: d.pts | 0, yrs: d.yrs | 0, holdings: strs(d.holdings),
+    bonds: (Array.isArray(d.bonds) ? d.bonds : []).filter(b => b && Number.isInteger(b.id) && typeof b.kind === 'string').map(b => ({id: b.id, kind: b.kind, close: +b.close || 0, since: b.since | 0})),
+    proj: d.proj && typeof d.proj.id === 'string' ? {id: d.proj.id, left: d.proj.left | 0, total: d.proj.total | 0} : null, projDone: d.projDone | 0, social: Number.isInteger(d.social) ? d.social : -1};
 }
 
 const RANKS = [[70, 'Illustrious'], [50, 'Eminent'], [35, 'Notable'], [20, 'Respected'], [0, 'Commoner']];

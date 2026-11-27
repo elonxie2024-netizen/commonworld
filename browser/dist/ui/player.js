@@ -1,6 +1,9 @@
 // Person mode on screen: the page for the person you are playing, and their marker on the map.
 // Everything shown comes from snap.player (built in the worker by sim/life_player.js); nothing here changes the world.
 const SEASON_ICONS = ['🌱', '☀️', '🍂', '❄️'];
+import {goalsTab, propertyTab, peopleTab} from './depth.js';
+let main = 'life'; // which page of the person's life is open: the routine, goals, property or people
+export const setMain = m => { main = m; };
 let tab = 'journal'; // which list sits under the focus: the season journal or the stitched life story
 export const setTab = t => { tab = t; };
 
@@ -38,6 +41,9 @@ export function playerPanel(v, h) {
   };
   const journal = v.log.length ? `<ol class="life-lines">${v.log.map(l => `<li><b>${esc(SEASONS[l.season])} ${l.year}</b><span>${esc(l.text)}</span></li>`).join('')}</ol>` : '<p class="muted">Nothing yet. Press Play, or live one season.</p>';
   const tabs = [['journal', 'Journal'], ['story', 'Life story']].map(([id, label]) => `<button class="${tab === id ? 'on' : ''}" data-pm-tab="${id}">${label}</button>`).join('');
+  const MAIN = [['life', 'Life'], ['goals', 'Goals'], ['property', 'Property'], ['people', 'People']];
+  const mainTabs = `<nav class="pm-nav" role="tablist">${MAIN.map(([id, label]) => `<button class="${main === id ? 'on' : ''}" data-pm-main="${id}">${label}${id === 'goals' && v.depth.perks.points ? `<em>${v.depth.perks.points}</em>` : ''}</button>`).join('')}</nav>`;
+  const traits = `<div class="tags pm-traits">${v.depth.traits.map(x => `<span class="tag" style="--c:#0d9488" title="${esc(x.text)}">${esc(x.label)}</span>`).join('')}</div>`;
   const town = t => `<div class="pm-town"><span class="flag-dot sm" style="--c:${cc(t.country)}">${esc(t.name.charAt(0))}</span><div><b>${esc(t.name)}</b><small>${esc(t.countryName)}${t.home ? '' : ' · abroad'} · ${t.distance} tiles · ${num(t.population)} people</small></div><button class="soft" data-queue="move" data-queue-arg="${t.id}" ${moveAct?.enabled === false ? 'disabled' : ''}>Go</button></div>`;
   return `<section class="pm">
     ${head('YOU ARE PLAYING', v.name, `${tag(v.role || v.job, col)}${tag(`Age ${v.age}`, '#64748b')}${tag(`${v.home.name}, ${v.country.name}`, col)}${tag(`${v.standing.rank} · ${v.standing.score}`, '#8b5cf6')}${v.overlay ? tag('Own story', '#64748b') : ''}${gen}${hurt}`, `<button class="soft" data-tab="overview">${icon('compass')} View the world</button>${stop}`)}
@@ -45,18 +51,17 @@ export function playerPanel(v, h) {
       <div class="pm-now"><small>${last ? `Last season · ${esc(SEASONS[last.season])} ${last.year}` : 'A new life'}</small><p>${last ? esc(last.text) : `${first} is about to begin.`}</p>
         <small>${queued ? `Next season: <b>${esc(queued)}</b> <button class="link" data-queue-clear>Cancel</button>` : `${first} will ${esc((cur?.label ?? 'carry on').toLowerCase())}.`}</small></div>
       <button class="primary" data-play-next>Live one season</button></div>
-    <div class="pm-cols"><div class="pm-main">
+    <div class="pm-cols"><div class="pm-main">${mainTabs}${main === 'life' ? `
       <section class="panel"><div class="panel-head"><div><h2>How you spend your seasons</h2><p>Pick one and ${first} keeps doing it while time runs. Change it whenever you like; it costs nothing.</p></div></div><div class="pad">${groups}</div></section>
       ${moves.length ? `<section class="panel"><div class="panel-head"><div><h2>Make a change</h2><p>Done at the start of the next season, in place of your usual routine.</p></div></div><div class="pad"><div class="pm-acts">${moves.map(oneoff).join('')}</div></div></section>` : ''}
       <section class="panel"><div class="panel-head"><div class="pm-tabs" role="tablist">${tabs}</div></div><div class="pad">${tab === 'story' ? lifeLines(v.lines, esc) : journal}</div></section>
-    </div><div class="pm-side">
-      <section class="panel"><div class="panel-head"><div><h2>You</h2><p>${esc(v.summary)}</p></div></div><div class="pad"><div class="pm-stats">${v.stats.map(bar).join('')}</div><small class="muted">${esc(v.lineage)} family. Skill, knowledge, contacts and honor grow with what you do and shape how it turns out.</small></div></section>
+    ` : main === 'goals' ? goalsTab(v, h) : main === 'property' ? propertyTab(v, h) : peopleTab(v, h)}</div><div class="pm-side">
+      <section class="panel"><div class="panel-head"><div><h2>You</h2><p>${esc(v.summary)}</p></div></div><div class="pad">${traits}<div class="pm-stats">${v.stats.map(bar).join('')}</div><small class="muted">${esc(v.lineage)} family. Skill, knowledge, contacts and honor grow with what you do and shape how it turns out.</small></div></section>
       <section class="panel"><div class="panel-head"><div><h2>${esc(v.home.name)}</h2><p>${esc(w.government)} · ruled by ${esc(w.ruler || 'nobody')}</p></div><button class="link" data-focus-settlement="${v.home.id}">${icon('map')} Map</button></div><div class="pad"><div class="statgrid">${stat('Food', Math.round(w.food))}${stat('Stability', Math.round(w.stability))}</div><div class="tags">${w.conditions.map(x => tag(x, '#64748b')).join('')}${w.wars.map(x => tag('⚔ at war with ' + x, '#dc2626')).join('')}${w.conditions.length || w.wars.length ? '' : '<span class="muted">All quiet.</span>'}</div>${v.nearby.length ? `<h3 class="pm-sub">Move somewhere else</h3><div class="pm-towns">${v.nearby.map(town).join('')}</div>` : ''}</div></section>
-      <section class="panel"><div class="panel-head"><div><h2>Family</h2><p>${v.kids.length ? `${v.kids.length} living ${v.kids.length === 1 ? 'child' : 'children'}` : 'No living children'}</p></div></div><div class="pad"><div class="linkrow">${v.parents.length ? '<span>Parents</span>' : ''}${v.parents.map(p => `<button class="chip" data-person="${p.id}"><i></i>${esc(p.name)}${p.alive ? '' : ' †'}</button>`).join('')}${v.kids.length ? '<span>Children</span>' : ''}${v.kids.slice(0, 12).map(k => `<button class="chip" data-person="${k.id}"><i></i>${esc(k.name)} · ${k.age}</button>`).join('')}</div></div></section>
     </div></div></section>`;
 }
 
-const KIND_STYLE = { war: ['swords', '#dc2626'], plague: ['pulse', '#ec4899'], famine: ['coins', '#b45309'], settlers: ['compass', '#0d9488'], office: ['flag', '#8b5cf6'], rival: ['star', '#f59e0b'] };
+const KIND_STYLE = { windfall: ['coins', '#16a34a'], thieves: ['hammer', '#64748b'], festival: ['star', '#f59e0b'], apprentice: ['user', '#0d9488'], friend: ['users', '#3b82f6'], scandal: ['list', '#be123c'], commission: ['hammer', '#b45309'], courtship: ['star', '#ec4899'], bribe: ['coins', '#7c3aed'], war: ['swords', '#dc2626'], plague: ['pulse', '#ec4899'], famine: ['coins', '#b45309'], settlers: ['compass', '#0d9488'], office: ['flag', '#8b5cf6'], rival: ['star', '#f59e0b'] };
 
 /** The pop-up for a life choice. Play stays paused until one option is picked. h: { esc, icon } */
 export function choiceHtml(ch, h) {

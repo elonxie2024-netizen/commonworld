@@ -9,6 +9,7 @@
 import {PAY} from './civic.js';
 import {info} from './governments.js';
 import {dice} from './life_seasons.js';
+import {mods} from './life_traits.js';
 
 const money = n => Math.round(n).toLocaleString('en-US');
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
@@ -84,7 +85,7 @@ export function focusSpecs(x) {
       break;
     case 'merchant':
       add(T, 'caravan', 'Send a caravan', 'Stake some savings on a long trade run. Skill and contacts help.', x => {
-        const s = stake(x, 0.15), win = x.u(43) < clamp(0.55 + x.st.connections / 400 + x.st.skill / 600 + (x.c ? x.c.prosperity / 600 : 0), 0.2, 0.9), dw = win ? s * (0.5 + x.u(44)) : -s * (0.4 + 0.6 * x.u(44));
+        const s = stake(x, 0.15), win = x.u(43) < clamp(0.55 + x.st.connections / 400 + x.st.skill / 600 + (x.c ? x.c.prosperity / 600 : 0) + mods(x.life.player).luck, 0.2, 0.9), dw = win ? s * (0.5 + x.u(44)) : -s * (0.4 + 0.6 * x.u(44));
         return {dw, df: win ? 0.6 : 0, d: {connections: win ? 1.5 : 0, skill: 0.6}, venture: win && dw >= 15 ? Math.round(dw) : 0, text: win ? `Your caravan came home heavy and cleared ${money(dw)}.` : `Your caravan was lost on the road. You are out ${money(-dw)}.`};
       }, v.wealth >= 5, 'You have nothing to stake.');
       add(T, 'lend', 'Lend at interest', 'A steady return on your savings, and a name for hardness.', x => { const dw = Math.min(60, x.v.wealth * 0.012 * (0.5 + x.u(45))); return {dw, d: {honor: -0.8}, text: `Your loans earned ${money(dw)} in interest. Debtors do not love you.`}; }, v.wealth >= 20, 'You need savings to lend.');
@@ -141,7 +142,7 @@ export function focusSpecs(x) {
   });
   add(A, 'network', 'Cultivate contacts', 'Costs a little; builds your network.', x => ({dw: -Math.min(x.v.wealth, 2), df: 0.3, d: {connections: gain(x.st.connections, 2.2)}, text: 'You spent the season making and keeping friends.'}));
   add(A, 'trade', 'Trading venture', 'Stake some savings: a fair chance to profit, and a loss costs you.', x => {
-    const base = Math.min(400, 2 + 0.05 * x.v.wealth), win = x.u(3) < clamp(0.5 + (x.v.job === 'merchant' ? 0.1 : 0) + (x.c ? x.c.prosperity / 400 : 0) + x.st.skill / 700 + x.st.connections / 900, 0.15, 0.9);
+    const base = Math.min(400, 2 + 0.05 * x.v.wealth), win = x.u(3) < clamp(0.5 + (x.v.job === 'merchant' ? 0.1 : 0) + (x.c ? x.c.prosperity / 400 : 0) + x.st.skill / 700 + x.st.connections / 900 + mods(x.life.player).luck, 0.15, 0.9);
     const dw = win ? base * (1 + x.u(4)) : -Math.min(x.v.wealth * 0.5, base * 0.8 * x.u(4));
     return {dw, d: {skill: 0.3}, venture: win && dw >= 15 ? Math.round(dw) : 0, text: dw >= 0 ? `A trading venture paid off: you made ${money(dw)}.` : `A trading venture went badly: you lost ${money(-dw)}.`};
   }, v.wealth >= 2, 'You have nothing to stake.');
@@ -166,7 +167,10 @@ export const defaultFocus = p => (p.age < 18 ? 'school' : 'work');
 export function runFocus(x, id) {
   const specs = focusSpecs(x);
   const spec = specs.find(f => f.id === id && f.enabled) ?? specs.find(f => f.id === defaultFocus(x.p) && f.enabled) ?? specs[0];
-  const e = spec.run(x);
+  const e = spec.run(x), m = mods(x.life.player); // traits and perks scale what you earn, learn and are known for
+  if (e.dw > 0) e.dw *= 1 + m.income;
+  if (e.df > 0) e.df *= 1 + m.fame;
+  if (e.d) { e.d = {...e.d}; for (const k in e.d) if (e.d[k] > 0) e.d[k] *= 1 + (k === 'connections' ? m.social : k === 'skill' || k === 'knowledge' ? m.learn : 0); }
   x.life.apply(x.sim, x.p, {dw: e.dw, df: e.df, venture: e.venture, insight: e.insight});
   bump(x.st, e.d);
   return e.text;

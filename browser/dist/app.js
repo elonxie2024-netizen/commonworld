@@ -7,7 +7,7 @@ import { InfluenceBar } from './ui/influences.js';
 import { Pings } from './ui/pings.js';
 import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
 import { Editor } from './ui/editor.js';
-import { playerPanel, PlayerMarker, choiceHtml, setTab } from './ui/player.js';
+import { playerPanel, PlayerMarker, choiceHtml, setTab, setMain } from './ui/player.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -884,6 +884,13 @@ async function chooseUI(option) {
   if (ok && again && snap?.player?.alive && !snap.player.choice) { if (again === 'play') togglePlay(); else runYears(again); } // the decision made, time carries on by itself
   else if (!ok) resume = again;
 }
+// Goals, projects, perks, property and people: things done by choice, apart from the routine.
+async function depthUI(kind, id) {
+  try {
+    const r = await sim.depth(kind, id); snap.player = r.view; if (r.view.flow) setSnap(await sim.getSnapshot()); render(true);
+    if (r.view.log?.[0]) toast(r.view.log[0].text);
+  } catch (e) { toast(e.message || String(e), 'warn'); }
+}
 // A focus is what the person does every season; changing it takes no time and does not stop the clock.
 async function setFocusUI(id) {
   try { const r = await sim.setFocus(id); snap.player = r.view; render(true); toast('Focus: ' + (r.view.focuses.find(f => f.id === id)?.label ?? id)); } catch (e) { showError(e); }
@@ -914,6 +921,8 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-choice]'))) { chooseUI(el.dataset.choice); return; }
   if ((el = t.closest('[data-play-heir]'))) { succeedUI(el.dataset.playHeir); return; }
   if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
+  if ((el = t.closest('[data-pm-main]'))) { setMain(el.dataset.pmMain); render(true); return; }
+  if ((el = t.closest('[data-depth]'))) { depthUI(el.dataset.depth, el.dataset.depthId ?? null); return; }
   if ((el = t.closest('[data-pm-tab]'))) { setTab(el.dataset.pmTab); render(true); return; }
   if ((el = t.closest('[data-focus]'))) { setFocusUI(el.dataset.focus); return; }
   if ((el = t.closest('[data-queue]'))) { const act = el.dataset.queue, sel = $(`#queue-arg-${act}`); queueUI(act, el.dataset.queueArg ?? (sel ? sel.value : null)); return; }

@@ -29,6 +29,7 @@ function scene(kind, flow = false) {
   const p = [...sim.people.values()].filter(x => x.age >= 28 && x.age <= 50).sort((a, b) => b.wealth - a.wealth)[0];
   const c = sim.countries.get(p.country), town = sim.settlements.get(p.settlement);
   g.playAs(p.id);
+  if (kind === 'friend') { const q2 = [...sim.people.values()].find(x => x.id !== p.id && x.settlement === town.id && x.age >= 18); g.life.player.bonds.push({id: q2.id, kind: 'friend', close: 60, since: sim.year}); }
   if (kind === 'war') { const other = land.find(x => x.id !== c.id); g.command(`war ${q(c.name)} ${q(other.name)} force=true`); }
   if (kind === 'plague') {
     g.command('add disease "Glass fever" course=acute infection=.4 death=.02 recovery=.85');
