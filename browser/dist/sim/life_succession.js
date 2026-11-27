@@ -16,6 +16,7 @@ import {info, title_of} from './governments.js';
 import {unit} from './life_seasons.js';
 import {newStats, defaultFocus} from './life_careers.js';
 import {initDepth} from './life_depth.js';
+import {worldOf} from './world.js';
 
 export const MAX_HEIRS = 8;
 /** Share of the estate's money and of the dead person's fame that each kind of relative inherits. */
@@ -116,6 +117,7 @@ export function succeed(sim, life, pick) {
   const line = rel ? [...(pl.line ?? []), {id: pl.id, name: sim.full_name(dead), born: dead.born, died: dead.died}].slice(-12) : [];
   const next = {id: p.id, season: 4, log: [], since: when, choice: null, last: {}, eventKey: null, gen: rel ? (pl.gen ?? 1) + 1 : 1, line, mark: null, stats: newStats(p, rel ? pl.stats : null), focus: defaultFocus(p), queue: null, ...initDepth(sim, p.id, rel ? pl : null, ['child', 'grandchild', 'partner'].includes(rel))};
   life.player = next;
+  worldOf(life).inherit(pl.id, p.id, ['child', 'grandchild', 'partner'].includes(rel));
   const bits = [];
   if (gets) {
     delete sim._command_undo;

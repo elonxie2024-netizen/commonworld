@@ -2,6 +2,7 @@
 // Everything shown comes from snap.player (built in the worker by sim/life_player.js); nothing here changes the world.
 const SEASON_ICONS = ['🌱', '☀️', '🍂', '❄️'];
 import {goalsTab, propertyTab, peopleTab} from './depth.js';
+import {bizTab, newsTab} from './world.js';
 let main = 'life'; // which page of the person's life is open: the routine, goals, property or people
 export const setMain = m => { main = m; };
 let tab = 'journal'; // which list sits under the focus: the season journal or the stitched life story
@@ -41,7 +42,7 @@ export function playerPanel(v, h) {
   };
   const journal = v.log.length ? `<ol class="life-lines">${v.log.map(l => `<li><b>${esc(SEASONS[l.season])} ${l.year}</b><span>${esc(l.text)}</span></li>`).join('')}</ol>` : '<p class="muted">Nothing yet. Press Play, or live one season.</p>';
   const tabs = [['journal', 'Journal'], ['story', 'Life story']].map(([id, label]) => `<button class="${tab === id ? 'on' : ''}" data-pm-tab="${id}">${label}</button>`).join('');
-  const MAIN = [['life', 'Life'], ['goals', 'Goals'], ['property', 'Property'], ['people', 'People']];
+  const MAIN = [['life', 'Life'], ['goals', 'Goals'], ['property', 'Property'], ['people', 'People'], ['business', 'Business'], ['news', 'News']];
   const mainTabs = `<nav class="pm-nav" role="tablist">${MAIN.map(([id, label]) => `<button class="${main === id ? 'on' : ''}" data-pm-main="${id}">${label}${id === 'goals' && v.depth.perks.points ? `<em>${v.depth.perks.points}</em>` : ''}</button>`).join('')}</nav>`;
   const traits = `<div class="tags pm-traits">${v.depth.traits.map(x => `<span class="tag" style="--c:#0d9488" title="${esc(x.text)}">${esc(x.label)}</span>`).join('')}</div>`;
   const town = t => `<div class="pm-town"><span class="flag-dot sm" style="--c:${cc(t.country)}">${esc(t.name.charAt(0))}</span><div><b>${esc(t.name)}</b><small>${esc(t.countryName)}${t.home ? '' : ' · abroad'} · ${t.distance} tiles · ${num(t.population)} people</small></div><button class="soft" data-queue="move" data-queue-arg="${t.id}" ${moveAct?.enabled === false ? 'disabled' : ''}>Go</button></div>`;
@@ -55,7 +56,7 @@ export function playerPanel(v, h) {
       <section class="panel"><div class="panel-head"><div><h2>How you spend your seasons</h2><p>Pick one and ${first} keeps doing it while time runs. Change it whenever you like; it costs nothing.</p></div></div><div class="pad">${groups}</div></section>
       ${moves.length ? `<section class="panel"><div class="panel-head"><div><h2>Make a change</h2><p>Done at the start of the next season, in place of your usual routine.</p></div></div><div class="pad"><div class="pm-acts">${moves.map(oneoff).join('')}</div></div></section>` : ''}
       <section class="panel"><div class="panel-head"><div class="pm-tabs" role="tablist">${tabs}</div></div><div class="pad">${tab === 'story' ? lifeLines(v.lines, esc) : journal}</div></section>
-    ` : main === 'goals' ? goalsTab(v, h) : main === 'property' ? propertyTab(v, h) : peopleTab(v, h)}</div><div class="pm-side">
+    ` : main === 'goals' ? goalsTab(v, h) : main === 'property' ? propertyTab(v, h) : main === 'business' ? bizTab(v, h) : main === 'news' ? newsTab(v, h.world, h) : peopleTab(v, h)}</div><div class="pm-side">
       <section class="panel"><div class="panel-head"><div><h2>You</h2><p>${esc(v.summary)}</p></div></div><div class="pad">${traits}<div class="pm-stats">${v.stats.map(bar).join('')}</div><small class="muted">${esc(v.lineage)} family. Skill, knowledge, contacts and honor grow with what you do and shape how it turns out.</small></div></section>
       <section class="panel"><div class="panel-head"><div><h2>${esc(v.home.name)}</h2><p>${esc(w.government)} · ruled by ${esc(w.ruler || 'nobody')}</p></div><button class="link" data-focus-settlement="${v.home.id}">${icon('map')} Map</button></div><div class="pad"><div class="statgrid">${stat('Food', Math.round(w.food))}${stat('Stability', Math.round(w.stability))}</div><div class="tags">${w.conditions.map(x => tag(x, '#64748b')).join('')}${w.wars.map(x => tag('⚔ at war with ' + x, '#dc2626')).join('')}${w.conditions.length || w.wars.length ? '' : '<span class="muted">All quiet.</span>'}</div>${v.nearby.length ? `<h3 class="pm-sub">Move somewhere else</h3><div class="pm-towns">${v.nearby.map(town).join('')}</div>` : ''}</div></section>
     </div></div></section>`;

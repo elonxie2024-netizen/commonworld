@@ -834,3 +834,38 @@ body.pm-mode .topbar{justify-content:flex-end;padding:12px var(--gutter)}
 .pm-bond-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .pm-bond-acts .soft{padding:6px 11px;font-size:12.5px}
 @media(max-width:900px){.pm-nav button{padding:8px 14px}}
+
+/* the press and the businesses */
+.wgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.wcol{display:grid;gap:18px;align-content:start;min-width:0}
+@media(max-width:1000px){.wgrid{grid-template-columns:1fr}}
+.ch-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.ch-bar button{border:1px solid #e3e5f5;background:#fff;border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:700;color:#475569}
+.ch-bar button[data-ch]:not([data-ch=all]){border-color:color-mix(in srgb,var(--c) 40%,#fff);color:var(--c)}
+.ch-bar button.on{background:#1e1b4b;color:#fff;border-color:#1e1b4b}
+.ch-bar button.on[style]{background:var(--c);color:#fff;border-color:var(--c)}
+.desk{display:grid;gap:2px;padding:12px 14px;margin-bottom:12px;border-radius:14px;background:color-mix(in srgb,var(--c,#6366f1) 9%,#fff);border-left:4px solid var(--c,#6366f1)}
+.desk span{font-style:italic;color:#475569}.desk small{color:var(--muted)}
+.stories{display:grid;gap:10px}
+.story{padding:12px 14px;border-radius:14px;background:#fff;border:1px solid #e8e9f6;border-left:4px solid var(--c)}
+.story.near{background:#f1fbf8}
+.story-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:3px}
+.story .ch{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--c)}
+.story time{font-size:11.5px;color:var(--muted)}
+.story h3{margin:0;font-size:16px;line-height:1.3}
+.story p{margin:4px 0 0;color:#475569;font-size:13.5px}
+.story-act{margin-top:8px}
+.wrow{display:grid;gap:1px;padding:7px 0;border-bottom:1px solid #eef0fa}
+.wrow:last-child{border-bottom:0}.wrow small{color:var(--muted);font-size:12px}
+.wrow-h{margin:14px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.firms{display:grid;gap:6px}
+.firm{display:grid;grid-template-columns:minmax(0,1fr) 90px 110px;gap:12px;align-items:center;text-align:left;padding:10px 14px;border:1px solid #e8e9f6;border-radius:12px;background:#fff}
+.firm:hover{border-color:#b45309}.firm.on{border-color:#b45309;background:#fff8ee}.firm.dead{opacity:.55}
+.firm-name{display:grid;min-width:0}.firm-name b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.firm small{color:var(--muted);font-size:12px}
+.firm-num{display:grid;text-align:right}.firm-num.up b{color:#15803d}.firm-num.down b{color:#be123c}
+.firm-edit{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:12px}
+.biz-mine{align-items:flex-start}.strats{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.strats button{padding:5px 11px;font-size:12.5px}
+@media(max-width:720px){.firm{grid-template-columns:1fr 80px}.firm-num:last-child{display:none}}
+.pm-main .wgrid{grid-template-columns:1fr}

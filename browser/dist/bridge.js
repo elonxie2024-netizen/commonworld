@@ -17,4 +17,6 @@ export class BrowserSimulation {
  setFocus(id){return this.request('setFocus',id);}
  queueAct(act,arg){return this.request('queueAct',act,arg);}
  depth(kind,id,arg){return this.request('depth',kind,id,arg);}
+ business(kind,id,arg){return this.request('business',kind,id,arg);}
+ firmEdit(id,what){return this.request('firmEdit',id,what);}
 }

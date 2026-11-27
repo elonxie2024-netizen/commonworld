@@ -11,10 +11,12 @@ import {command} from './civic.js';
 import {Life} from './life.js';
 import {runSeasons, runSeason} from './life_seasons.js';
 import {newPlayer, perform, playerView, oneOffs} from './life_player.js';
-import {newStats, context, focusSpecs, runFocus} from './life_careers.js';
+import {newStats, context, focusSpecs, runFocus, bump} from './life_careers.js';
 import {depthSeason, depthAct, ensureDepth} from './life_depth.js';
 import {detect, resolveChoice} from './life_events.js';
 import {succeed} from './life_succession.js';
+import {World, worldOf} from './world.js';
+import {bizAct} from './world_firms.js';
 import {observers} from './warfare.js';
 import {Simulation, Person, Settlement, Sickness, Lineage, Country, NameGenerator} from './civsim.js';
 import {serialize, deserialize, Counter, TupleMap} from './runtime.js';
@@ -143,6 +145,8 @@ export class Engine {
     try { this.sim.tick(false); } finally { observers.levy = null; }
     if (seasons) runSeasons(this.sim, life); // four seasons of what people do, then the diff notes what happened to whom
     life.observe(this.sim, before);
+    const lines = worldOf(life).tick(this.sim, life, m => this.sim.render_history(m)), pl = life.player; // the press, the arts and the firms close the year
+    if (pl && this.sim.people.has(pl.id)) for (const text of lines.reverse()) pl.log.unshift({year: this.sim.year, season: 0, text});
   }
 
   // ---- person mode
@@ -191,6 +195,29 @@ export class Engine {
     if (r.tag) life.add(p.id, sim.year, 'event', 'choice', r.tag);
     life.touch(sim);
     return {view: playerView(sim, life), snapshot: null};
+  }
+  /** Business and the town's life: found a firm, take a post, trade shares, steer a firm, go to a festival. */
+  business(kind, id, arg) {
+    const life = this.life, pl = life?.player, sim = this.sim, p = pl && sim.people.get(pl.id);
+    if (!p) throw Error('Nobody is being played.');
+    const world = worldOf(life), r = bizAct(world, sim, life, p, life.view(sim, p), String(kind), id == null ? null : String(id), arg, world.towns(sim));
+    pl.log.unshift({year: sim.year, season: Math.min(3, pl.season), text: r.text});
+    if (r.bump) bump(pl.stats, r.bump);
+    if (r.tag) life.add(p.id, sim.year, 'event', 'business', r.tag);
+    life.touch(sim);
+    return {view: playerView(sim, life), snapshot: null};
+  }
+  /** Simulation mode: nudge a firm. */
+  firmEdit(id, what) {
+    const life = this.life ??= new Life(), world = worldOf(life), f = world.firms.get(Number(id)), y = this.sim.year;
+    if (!f || !f.alive) throw Error('That firm is not trading.');
+    const nm = f.name, t = f.townName;
+    if (what === 'bailout') { f.cap += Math.max(60, f.peak * 0.3); f.loss = 0; f.hist.unshift([y, 'Bailed out.']); world.say(y, 'ledger', 'firm', `${nm} is bailed out`, `A rescue keeps its doors open in ${t}`, {score: 64, town: f.town, firm: f.id}); }
+    else if (what === 'boom') { f.cap *= 1.35; f.rep = Math.min(100, f.rep + 15); f.hist.unshift([y, 'A sudden boom.']); world.say(y, 'ledger', 'firm', `Orders flood in for ${nm}`, `A boom in ${t}`, {score: 62, town: f.town, firm: f.id}); }
+    else if (what === 'scandal') { f.rep = Math.max(0, f.rep - 30); f.cap *= 0.85; f.hist.unshift([y, 'A scandal broke.']); world.say(y, 'whisper', 'firm', `${nm}: the whole story`, `The books do not add up, say people in ${t}`, {score: 60, town: f.town, firm: f.id}); }
+    else if (what === 'close') { f.alive = false; f.ended = y; f.why = 'shut by decree'; f.hist.unshift([y, 'Shut by decree.']); for (const [k, p] of [...world.posts]) if (p.firm === f.id) world.posts.delete(k); world.say(y, 'ledger', 'firm', `${nm} is shut`, `Closed in ${t} by decree`, {score: 66, town: f.town, firm: f.id}); }
+    else throw Error('Unknown intervention.');
+    return {text: `${nm}: ${what}.`, snapshot: this.snapshot()};
   }
   stopPlaying() { if (this.life) this.life.player = null; return {view: null, snapshot: null}; }
   playerView() { return this.life ? playerView(this.sim, this.life) : null; }
@@ -254,7 +281,8 @@ export class Engine {
     // The pending-undo snapshot is plain scratch data that a save file cannot hold (and would be stale on loading anyway).
     const undo = this.sim._command_undo; delete this.sim._command_undo;
     let text; try { text = serialize(this.sim); } finally { if (undo) this.sim._command_undo = undo; }
-    return `${text.slice(0, -1)},"life":${JSON.stringify((this.life ??= new Life()).toJSON())}}`;
+    const life = this.life ??= new Life();
+    return `${text.slice(0, -1)},"life":${JSON.stringify({...life.toJSON(), world: worldOf(life).toJSON()})}}`;
   }
 
   importSave(text) {
@@ -266,7 +294,7 @@ export class Engine {
     this.sim = candidate;
     let life = new Life();
     const at = text.lastIndexOf(',"life":');
-    if (at > 0) { try { life = Life.fromJSON(JSON.parse(text.slice(at + 8, -1))); } catch { /* an older save: start with no tags */ } }
+    if (at > 0) { try { const data = JSON.parse(text.slice(at + 8, -1)); life = Life.fromJSON(data); life.world = World.fromJSON(data.world); } catch { /* an older save: start with no tags */ } }
     this.life = life;
     const pl = life.player; // an older save has no stats or focus yet
     if (pl) ensureDepth(this.sim, pl);
@@ -416,7 +444,7 @@ export class Engine {
       events: this.events(sim, lineages),
       reports,
       catalog: {foundations: TECHNOLOGIES.size, innovations: INNOVATIONS.size, events: EVENT_CATALOG.length},
-      canUndo: !!sim._command_undo, lifeFlow: !!this.life?.flow, player: this.life?.player ? playerView(sim, this.life) : null,
+      world: worldOf(this.life ??= new Life()).view(sim, this.life), canUndo: !!sim._command_undo, lifeFlow: !!this.life?.flow, player: this.life?.player ? playerView(sim, this.life) : null,
     };
   }
 

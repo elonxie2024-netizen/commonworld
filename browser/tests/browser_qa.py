@@ -20,6 +20,12 @@ with sync_playwright() as p:
     page.wait_for_function("document.querySelector('#seed-input').value==='42'", timeout=120000); idle()
     assert page.locator('.news .lead-story').is_visible(), 'breaking news panel'
     assert page.locator('#dock').is_hidden(), 'the console stays hidden until ~ is pressed'
+    # the press and the businesses (sim mode)
+    page.click('[data-tab="business"]'); assert page.locator('.firm').count() >= 2, 'the business page lists firms'
+    page.locator('.firm').first.click(); assert page.locator('.firm-card').count() == 1 and page.locator('[data-firm-edit]').count() == 4, 'a firm opens with its history and interventions'
+    page.click('[data-tab="news"]'); assert page.locator('.ch-bar button[data-ch]').count() == 8 and page.locator('.desk').count() == 1, 'the press page has seven channels'
+    page.locator('.ch-bar button[data-ch="ledger"]').click(); assert 'Daily Ledger' in page.inner_text('.desk'), 'a channel can be picked'
+    page.click('[data-tab="overview"]')
     assert page.locator('[data-tab="workshop"]').count() == 0 and page.locator('[data-influence]').count() == 4, 'influence bar replaces the workshop'
     # a person's story is stitched together on demand when their panel opens
     page.click('[data-tab="people"]'); page.locator('[data-person]').first.click()
@@ -35,6 +41,8 @@ with sync_playwright() as p:
     page.click('[data-depth="perk"]:not([disabled])'); page.wait_for_selector('.pm-perk.own'); assert page.locator('.pm-perk.own').count() == 1, 'a perk can be learned'
     page.click('[data-pm-main="property"]'); assert page.locator('[data-depth="buy"]').count() >= 5, 'property page lists things to buy'
     page.click('[data-pm-main="people"]'); page.click('[data-depth="meet"]'); page.wait_for_timeout(400); assert 'People in your life' in page.inner_text('.pm-main'), 'people page opens'
+    page.click('[data-pm-main="business"]'); assert page.locator('[data-biz="found"]').count() >= 1, 'business page offers firms to found'
+    page.click('[data-pm-main="news"]'); assert page.locator('.desk').count() == 1, 'person mode has the press too'
     page.click('[data-pm-main="life"]'); assert page.locator('.pm-focus').count() >= 4, 'the routine page is back'
     def answer():  # a life-choice pop-up must be answered before time moves on
         while page.locator('#choice-dialog[open]').count():

@@ -8,6 +8,7 @@ import { Pings } from './ui/pings.js';
 import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
 import { Editor } from './ui/editor.js';
 import { playerPanel, PlayerMarker, choiceHtml, setTab, setMain } from './ui/player.js';
+import { newsPage, businessPage, front, setChannel, setFirm, setSector } from './ui/world.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -23,6 +24,8 @@ const SECTIONS = [
   ['tech', 'Tech tree', 'tree', 'Fifteen ages of discovery: what each country knows, is researching, and what it unlocks.'],
   ['health', 'Health', 'pulse', 'Diseases, active infections, and outbreaks.'],
   ['wars', 'Wars', 'swords', 'Active conflicts and peace negotiations.'],
+  ['news', 'Press & culture', 'star', 'Seven channels report what matters, and the arts the world makes: premieres, schools of thought, the Grand Cup.'],
+  ['business', 'Business', 'chart', 'Every firm in the world: what it makes, who founded it, how it is doing, and the market.'],
   ['events', 'Event log', 'list', 'Everything that has happened, newest first.'],
   ['person', 'My person', 'user', 'The person you are playing: choose what they do each season.']
 ];
@@ -243,17 +246,19 @@ const LINKS = [
 
 // ---------- views ----------
 const VIEWS = {
-  person() { return playerPanel(snap.player, { esc, num, tag, stat, icon, cc, progressBar }); },
+  person() { return playerPanel(snap.player, { esc, num, tag, stat, icon, cc, progressBar, world: snap.world, panel, kpi, lineChart, empty }); },
+  news() { return newsPage(snap.world, { esc, num, tag, icon, panel, kpi, lineChart, empty }); },
+  business() { return businessPage(snap.world, { esc, num, tag, icon, panel, kpi, lineChart, empty }); },
   overview() {
     const infected = idx.living.filter(p => p.infection).length, places = livePlaces(), countries = snap.countries.filter(c => c.population > 0);
     const found = new Set(snap.countries.flatMap(c => [...c.technologies, ...c.innovations])).size;
     const reports = (snap.reports || []).slice(-120);
-    newsItems = headlines(snap, 7);
+    newsItems = front(snap.world, 7) ?? headlines(snap, 7);
     const [lead, ...rest] = newsItems;
     const news = `<section class="panel news"><div class="news-head"><span class="live"><i></i>BREAKING NEWS</span><span class="news-year">Year ${snap.year}</span></div>
       <button class="lead-story" data-news="0" style="--c:${lead.color}"><span class="ntag">${lead.tag}</span><h2>${esc(lead.headline)}</h2>${lead.sub ? `<p>${esc(lead.sub)}</p>` : ''}</button>
       <div class="headlines">${rest.map((n, i) => `<button class="headline" data-news="${i + 1}" style="--c:${n.color}"><span class="ntag">${n.tag}</span><div><b>${esc(n.headline)}</b>${n.sub ? `<small>${esc(n.sub)}</small>` : ''}</div><time>Y${n.year}</time></button>`).join('')}</div>
-      <button class="link news-more" data-tab="events">Full event log →</button></section>`;
+      <button class="link news-more" data-tab="news">The press and culture →</button> <button class="link news-more" data-tab="events">Full event log →</button></section>`;
     return `<div class="ov-grid"><div class="ov-main">
     <div class="kpis compact">${kpi('Population', num(snap.population), `+${num(snap.births)} / −${num(snap.deaths)} last year`, 'users', '#5b5bf0')}${kpi('Settlements', num(places.length), `${parties().length} settler parties · ${snap.projects.length} building`, 'home', '#14b8a6')}${kpi('Countries', num(countries.length), `${snap.countries.length - countries.length} dissolved`, 'flag', '#f97316')}${kpi('Infections', num(infected), `${snap.diseases.filter(d => d.active).length} ${snap.diseases.filter(d => d.active).length === 1 ? 'disease' : 'diseases'} active`, 'pulse', '#ef4444')}${kpi('Wars', num(snap.wars.length), snap.wars.length ? 'Active conflicts' : 'All at peace', 'swords', '#f59e0b')}${kpi('Discoveries', num(found), `of ${num(snap.catalog.foundations + snap.catalog.innovations)}`, 'bulb', '#8b5cf6')}</div>
     ${mapPanel(false)}
@@ -891,6 +896,17 @@ async function depthUI(kind, id) {
     if (r.view.log?.[0]) toast(r.view.log[0].text);
   } catch (e) { toast(e.message || String(e), 'warn'); }
 }
+// Business: found a firm, take a post, trade shares, steer a firm, go to a festival.
+async function bizUI(kind, id, arg) {
+  try {
+    const r = await sim.business(kind, id, arg); snap.player = r.view; setSnap(await sim.getSnapshot()); render(true);
+    if (r.view.log?.[0]) toast(r.view.log[0].text);
+  } catch (e) { toast(e.message || String(e), 'warn'); }
+}
+// Sim mode: nudge a firm.
+async function firmEditUI(id, what) {
+  try { const r = await sim.firmEdit(id, what); setSnap(r.snapshot); render(true); toast(r.text); } catch (e) { toast(e.message || String(e), 'warn'); }
+}
 // A focus is what the person does every season; changing it takes no time and does not stop the clock.
 async function setFocusUI(id) {
   try { const r = await sim.setFocus(id); snap.player = r.view; render(true); toast('Focus: ' + (r.view.focuses.find(f => f.id === id)?.label ?? id)); } catch (e) { showError(e); }
@@ -922,6 +938,11 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-play-heir]'))) { succeedUI(el.dataset.playHeir); return; }
   if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
   if ((el = t.closest('[data-pm-main]'))) { setMain(el.dataset.pmMain); render(true); return; }
+  if ((el = t.closest('[data-ch]'))) { setChannel(el.dataset.ch); render(true); return; }
+  if ((el = t.closest('[data-sector]'))) { setSector(el.dataset.sector); render(true); return; }
+  if ((el = t.closest('[data-firm-edit]'))) { const [fid, what] = el.dataset.firmEdit.split(':'); firmEditUI(fid, what); return; }
+  if ((el = t.closest('[data-firm]'))) { setFirm(Number(el.dataset.firm)); render(true); return; }
+  if ((el = t.closest('[data-biz]'))) { bizUI(el.dataset.biz, el.dataset.bizId ?? null, el.dataset.bizArg ?? null); return; }
   if ((el = t.closest('[data-depth]'))) { depthUI(el.dataset.depth, el.dataset.depthId ?? null); return; }
   if ((el = t.closest('[data-pm-tab]'))) { setTab(el.dataset.pmTab); render(true); return; }
   if ((el = t.closest('[data-focus]'))) { setFocusUI(el.dataset.focus); return; }

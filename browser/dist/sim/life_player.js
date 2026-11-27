@@ -88,6 +88,8 @@ export function liveChoice(ch, flow) {
 }
 
 /** Everything the person-mode screen needs, as plain data. */
+import {worldOf} from './world.js';
+import {bizView} from './world_firms.js';
 export function playerView(sim, life) {
   const pl = life.player; if (!pl) return null;
   const arch = sim.archive.get(pl.id); if (!arch) return null;
@@ -120,7 +122,7 @@ export function playerView(sim, life) {
     health: {infection: p.infection ?? null, woundedUntil: (p.wounded_until ?? 0) > sim.year ? p.wounded_until : 0, value: hl.value},
     world: {conditions, wars, ruler: c?.ruler != null ? sim.full_name(sim.archive.get(c.ruler)) : '', government: c?.government ?? '', stability: c?.stability ?? 0, food: c?.food ?? 0},
     parents, kids: heirs(sim, pl.id), nearby: towns(sim, life, p, 8), stats, focus,
-    focuses: specs.map(({run, ...f}) => f), oneoffs: oneOffs(sim, life, p), queued: pl.queue, depth: depthView(sim, life, p, v, st)
+    focuses: specs.map(({run, ...f}) => f), oneoffs: oneOffs(sim, life, p), queued: pl.queue, depth: depthView(sim, life, p, v, st), biz: bizView(worldOf(life), sim, life, p, v, st)
   };
 }
 
