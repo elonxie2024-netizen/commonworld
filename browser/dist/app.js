@@ -7,7 +7,7 @@ import { InfluenceBar } from './ui/influences.js';
 import { Pings } from './ui/pings.js';
 import { unitDialogs, findUnit, UNIT_TYPES } from './ui/units.js';
 import { Editor } from './ui/editor.js';
-import { playerPanel, PlayerMarker, choiceHtml } from './ui/player.js';
+import { playerPanel, PlayerMarker, choiceHtml, setTab } from './ui/player.js';
 
 const SECTIONS = [
   ['overview', 'Overview', 'grid', 'Key numbers, the live world map, and recent events.'],
@@ -610,10 +610,12 @@ function renderNav() {
 }
 function renderTop() {
   const s = SECTIONS.find(x => x[0] === section);
-  $('#page-title').textContent = s[1]; $('#page-description').textContent = s[3];
+  const pm = section === 'person' && snap?.player; document.body.classList.toggle('pm-mode', !!pm); // playing a person: the simulation's own controls step aside
+  $('#page-title').textContent = pm ? snap.player.name : s[1]; $('#page-description').textContent = pm ? `Year ${snap.player.next.year} · ${snap.player.next.name}` : s[3];
   $('#year-num').textContent = snap ? snap.year : 0;
   const seedBox = $('#seed-input'); if (seedBox && snap && document.activeElement !== seedBox) seedBox.value = snap.geoSeed;
   $('#undo').disabled = busy || !snap?.canUndo;
+  updatePlay();
   document.title = `${s[1]} · Year ${snap?.year ?? 0} · Commonworld`;
 }
 function render(force = false) {
@@ -733,7 +735,7 @@ function setBusy(v) {
 }
 function showError(error) { $('#error').hidden = false; $('#error').textContent = error?.message || String(error); playing = false; stopFlag = true; updatePlay(); }
 async function work(fn) { if (busy) return false; setBusy(true); $('#error').hidden = true; try { await fn(); return true; } catch (e) { showError(e); return false; } finally { setBusy(false); } }
-function updatePlay() { const on = playing || running; $('#play').innerHTML = on ? `${icon('stop')} Stop` : `${icon('play')} Play`; $('#play').classList.toggle('stop', on); }
+function updatePlay() { const on = playing || running, pm = document.body.classList.contains('pm-mode'); $('#play').innerHTML = on ? `${icon('stop')} ${pm ? 'Pause' : 'Stop'}` : `${icon('play')} ${pm ? 'Live on' : 'Play'}`; $('#play').classList.toggle('stop', on); }
 function setProgress(i, n) { $('#progress').textContent = i ? `Simulating ${i} / ${n}` : ''; $('#progress').hidden = !i; }
 // A year plays out as four seasons spread over the time its travellers need to walk their hops (at least a short minimum).
 // The speed setting is the time to cross one tile; autoplay rests a little after the last hop.
@@ -912,6 +914,7 @@ document.addEventListener('click', e => {
   if ((el = t.closest('[data-choice]'))) { chooseUI(el.dataset.choice); return; }
   if ((el = t.closest('[data-play-heir]'))) { succeedUI(el.dataset.playHeir); return; }
   if ((el = t.closest('[data-play-as]'))) { startPlaying(el.dataset.playAs); return; }
+  if ((el = t.closest('[data-pm-tab]'))) { setTab(el.dataset.pmTab); render(true); return; }
   if ((el = t.closest('[data-focus]'))) { setFocusUI(el.dataset.focus); return; }
   if ((el = t.closest('[data-queue]'))) { const act = el.dataset.queue, sel = $(`#queue-arg-${act}`); queueUI(act, el.dataset.queueArg ?? (sel ? sel.value : null)); return; }
   if (t.closest('[data-queue-clear]')) { queueUI(null); return; }

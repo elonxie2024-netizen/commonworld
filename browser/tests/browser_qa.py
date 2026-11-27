@@ -27,7 +27,8 @@ with sync_playwright() as p:
     assert "Born" in page.inner_text("#detail-dialog .life-lines li"), "life story begins with the birth"
     # person mode: play as them, choose seasons by hand, Step plays them for you, stop
     page.click('[data-play-as]'); idle()
-    assert page.inner_text('#page-title') == 'My person' and page.locator('.pm-focus').count() >= 4 and page.locator('.pm-stat').count() >= 7, 'person mode opens with focuses and stats'
+    assert page.evaluate("document.body.classList.contains('pm-mode')") and not page.locator('.sidebar').is_visible() and not page.locator('#step').is_visible() and not page.locator('.year-pill').is_visible(), 'person mode hides the simulation controls'
+    assert page.locator('.pm-focus').count() >= 4 and page.locator('.pm-stat').count() >= 7, 'person mode opens with focuses and stats'
     def answer():  # a life-choice pop-up must be answered before time moves on
         while page.locator('#choice-dialog[open]').count():
             page.locator('.choice-opt:not([disabled])').first.click(); idle(); page.wait_for_timeout(100)
@@ -46,24 +47,25 @@ with sync_playwright() as p:
     assert page.locator('#choice-dialog[open]').count() == 1, 'Esc cannot dismiss a decision'
     assert page.evaluate("window.__map.snap.player.choice !== null")
     answer(); assert page.locator('#choice-dialog[open]').count() == 0 and page.inner_text('#year-num') == year, 'answering resumes without skipping time'
-    page.click('#step'); idle(); answer(); assert page.locator('.pm-clock').is_visible()
+    page.click('[data-play-next]'); idle(); answer(); assert page.locator('.pm-clock').is_visible()
     # Play keeps running on its own focus; a decision stops it, and answering carries it on without pressing Play again
     page.select_option('#speed', '200'); page.click('[data-focus="network"]'); idle(); page.click('#play')
     try:
         page.wait_for_selector('#choice-dialog[open]', timeout=90000)
-        y = page.inner_text('#year-num'); assert page.inner_text('#play').strip() == 'Play', 'Play stops at a decision'
+        y = page.inner_text('#year-num'); assert page.inner_text('#play').strip() == 'Live on', 'Play stops at a decision'
         page.locator('.choice-opt:not([disabled])').first.click(); idle()
         page.wait_for_function("document.querySelector('#year-num').textContent !== '%s' || document.querySelector('#choice-dialog[open]')" % y, timeout=60000)
-        assert page.inner_text('#play').strip() == 'Stop' or page.locator('#choice-dialog[open]').count(), 'answering carries on without pressing Play'
+        assert page.inner_text('#play').strip() == 'Pause' or page.locator('#choice-dialog[open]').count(), 'answering carries on without pressing Play'
     except Exception as e:
         if 'carries on' in str(e) or 'stops at' in str(e): raise
     finally:
-        if page.inner_text('#play').strip() == 'Stop': page.click('#play')
+        if page.inner_text('#play').strip() == 'Pause': page.click('#play')
         idle(); answer(); page.select_option('#speed', '1400')
     # when the person dies they choose who carries on: family with what each inherits, or a random person if none is left
+    page.wait_for_timeout(400); idle(); answer()
     pid = page.evaluate("window.__map.snap.player.id")
     page.evaluate('document.activeElement.blur()'); page.keyboard.press('`'); page.fill('#command', 'delete person %s' % pid); page.press('#command', 'Enter'); idle(); page.keyboard.press('Escape')
-    page.click('[data-tab="person"]'); idle()
+    idle()
     assert 'YOU DIED' in page.inner_text('.pm-head'), 'the death screen appears'
     heirs = page.locator('[data-play-heir]').count()
     assert heirs <= 8 and (heirs or page.locator('[data-play-random]').count() == 1), 'heirs, or the random fallback when none are left'
